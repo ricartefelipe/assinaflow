@@ -1,0 +1,353 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-001-create-users
+      author: chatgpt
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_users
+              - column:
+                  name: email
+                  type: varchar(254)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: nome
+                  type: varchar(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: users
+            columnNames: email
+            constraintName: uq_users_email
+
+  - changeSet:
+      id: 001-002-create-payment-profiles
+      author: chatgpt
+      changes:
+        - createTable:
+            tableName: payment_profiles
+            columns:
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_payment_profiles
+              - column:
+                  name: behavior
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fail_next_n
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            constraintName: fk_payment_profiles_user
+            baseTableName: payment_profiles
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: 001-003-create-subscriptions
+      author: chatgpt
+      changes:
+        - createTable:
+            tableName: subscriptions
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_subscriptions
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: plan
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: start_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expiration_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: auto_renew
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: renewal_failures
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: next_renewal_attempt_at
+                  type: timestamp with time zone
+              - column:
+                  name: renewal_in_flight_until
+                  type: timestamp with time zone
+              - column:
+                  name: cancel_requested_at
+                  type: timestamp with time zone
+              - column:
+                  name: suspended_at
+                  type: timestamp with time zone
+              - column:
+                  name: version
+                  type: bigint
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            constraintName: fk_subscriptions_user
+            baseTableName: subscriptions
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: subscriptions
+            indexName: idx_subscriptions_user
+            columns:
+              - column:
+                  name: user_id
+        - createIndex:
+            tableName: subscriptions
+            indexName: idx_subscriptions_due
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: auto_renew
+              - column:
+                  name: expiration_date
+              - column:
+                  name: next_renewal_attempt_at
+              - column:
+                  name: renewal_in_flight_until
+
+  - changeSet:
+      id: 001-004-partial-unique-active-subscription
+      author: chatgpt
+      changes:
+        - sql:
+            sql: >
+              CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_one_active_per_user
+              ON subscriptions(user_id)
+              WHERE status IN ('ATIVA', 'CANCELAMENTO_AGENDADO');
+
+  - changeSet:
+      id: 001-005-create-renewal-attempts
+      author: chatgpt
+      changes:
+        - createTable:
+            tableName: subscription_renewal_attempts
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_subscription_renewal_attempts
+              - column:
+                  name: subscription_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: cycle_expiration_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attempt_number
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attempted_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: result
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount_cents
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: error_code
+                  type: varchar(80)
+              - column:
+                  name: error_message
+                  type: varchar(500)
+        - addForeignKeyConstraint:
+            constraintName: fk_renewal_attempts_subscription
+            baseTableName: subscription_renewal_attempts
+            baseColumnNames: subscription_id
+            referencedTableName: subscriptions
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: subscription_renewal_attempts
+            columnNames: subscription_id, cycle_expiration_date, attempt_number
+            constraintName: uq_attempt_per_cycle
+        - createIndex:
+            tableName: subscription_renewal_attempts
+            indexName: idx_renewal_attempts_subscription_cycle
+            columns:
+              - column:
+                  name: subscription_id
+              - column:
+                  name: cycle_expiration_date
+        - createIndex:
+            tableName: subscription_renewal_attempts
+            indexName: idx_renewal_attempts_attempted_at
+            columns:
+              - column:
+                  name: attempted_at
+
+  - changeSet:
+      id: 001-006-create-outbox-events
+      author: chatgpt
+      changes:
+        - createTable:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    primaryKeyName: pk_outbox_events
+              - column:
+                  name: aggregate_type
+                  type: varchar(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: aggregate_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: varchar(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: idempotency_key
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: jsonb
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: publish_attempts
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sent_at
+                  type: timestamp with time zone
+        - addUniqueConstraint:
+            tableName: outbox_events
+            columnNames: idempotency_key
+            constraintName: uq_outbox_idempotency_key
+        - createIndex:
+            tableName: outbox_events
+            indexName: idx_outbox_status_created
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: created_at

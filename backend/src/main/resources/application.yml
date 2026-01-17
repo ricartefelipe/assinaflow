@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: assinaflow
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/subscriptions}
+    username: ${DB_USERNAME:subscriptions}
+    password: ${DB_PASSWORD:subscriptions}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  cache:
+    type: simple
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    br.com.ricarte.assinaflow: INFO
+  pattern:
+    console: 'timestamp=%d{ISO8601} level=%-5level requestId=%X{requestId} logger=%logger{36} msg="%msg"%n'
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  scheduler:
+    enabled: ${APP_SCHEDULER_ENABLED:true}
+  payments:
+    async:
+      enabled: ${APP_PAYMENTS_ASYNC_ENABLED:false}
+  outbox:
+    publisher:
+      cron: "${APP_OUTBOX_PUBLISHER_CRON:*/2 * * * * *}"
+      batchSize: ${APP_OUTBOX_PUBLISHER_BATCH:100}
+      maxAttempts: ${APP_OUTBOX_PUBLISHER_MAX_ATTEMPTS:10}
+  renewal:
+    scheduler:
+      cron: ${APP_RENEWAL_CRON:0 */5 * * * *}
+  cancellation:
+    scheduler:
+      cron: ${APP_CANCELLATION_CRON:0 10 0 * * *}

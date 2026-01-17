@@ -1,0 +1,24 @@
+spring:
+  cache:
+    type: redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  cache.redis:
+    time-to-live: PT60S
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USERNAME:guest}
+    password: ${RABBIT_PASSWORD:guest}
+
+app:
+  payments:
+    async:
+      enabled: ${APP_PAYMENTS_ASYNC_ENABLED:true}
+  rabbitmq:
+    payments:
+      exchange: ${APP_PAYMENTS_EXCHANGE:payments.exchange}
+      queue: ${APP_PAYMENTS_QUEUE:payments.charge}
+      routingKey: ${APP_PAYMENTS_ROUTING_KEY:payments.charge}
