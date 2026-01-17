@@ -201,7 +201,7 @@ public class RenewalService {
         attempt.setAttemptedAt(now);
         attempt.setAmountCents(amountCents);
 
-        if (payment.approved()) {
+        if (payment.isApproved()) {
             attempt.setResult(RenewalAttemptResult.SUCCESS);
             attemptRepository.save(attempt);
             billingMetrics.renewalAttempt(true, "sync");
