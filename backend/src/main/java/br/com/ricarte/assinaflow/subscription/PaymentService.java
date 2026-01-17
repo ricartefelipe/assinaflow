@@ -57,7 +57,7 @@ public class PaymentService {
                 }
             };
 
-            approved = result.approved();
+            approved = result.isApproved();
             return result;
         } finally {
             billingMetrics.stopPaymentTimer(sample, approved);
