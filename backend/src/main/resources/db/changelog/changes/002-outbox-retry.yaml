@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-001-outbox-add-retry-columns
+      author: chatgpt
+      changes:
+        - addColumn:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: next_attempt_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_error
+                  type: varchar(1000)
+              - column:
+                  name: dead_at
+                  type: timestamp with time zone
+
+  - changeSet:
+      id: 002-002-outbox-index-next-attempt
+      author: chatgpt
+      changes:
+        - createIndex:
+            tableName: outbox_events
+            indexName: idx_outbox_status_next_attempt
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: next_attempt_at
+              - column:
+                  name: created_at
