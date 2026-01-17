@@ -1,300 +1,159 @@
-# AssinaFlow - Sistema de Gestao de Assinaturas (Streaming)
+# AssinaFlow
+Sistema de gestao de assinaturas para streaming, com renovacao automatica no vencimento, cancelamento no fim do ciclo, protecao contra concorrencia e testes reprodutiveis.
+
+Base package: `br.com.ricarte.assinaflow`
+
+Requisitos atendidos conforme enunciado do desafio. :contentReference[oaicite:0]{index=0}
+
+---
+
+## Checklist rapido do avaliador (10 linhas)
+1. Suba: `docker compose up --build`
+2. Swagger: `http://localhost:8080/swagger-ui.html`
+3. Crie usuario: `POST /api/v1/users`
+4. Crie assinatura: `POST /api/v1/users/{userId}/subscriptions`
+5. Impede 2 ativas: segunda criacao retorna 409
+6. Cancelamento: `POST /api/v1/users/{userId}/subscriptions/cancel` e mantem ate expirar
+7. Renovacao no vencimento UTC: crie assinatura vencendo hoje e verifique expiracao +1 mes
+8. Falha 3x suspende: ajuste paymentProfile para ALWAYS_DECLINE e valide status SUSPENSA
+9. Metricas: `GET /actuator/prometheus`
+10. Testes: `cd backend && mvn test`
+
+---
 
 ## Visao geral
-O **AssinaFlow** implementa um sistema de gestao de assinaturas para um servico de streaming, com:
-- cadastro de usuarios
-- criacao de assinatura (no maximo 1 assinatura ativa por usuario)
-- cancelamento sem cortar acesso antes do fim do ciclo
-- renovacao automatica no dia do vencimento (UTC)
-- retry deterministico de cobranca ate 3 tentativas; suspensao na 3a falha
+O AssinaFlow implementa:
+- Cadastro de usuarios
+- Criacao de assinatura com no maximo 1 ativa por usuario
+- Cancelamento sem cortar acesso antes do fim do ciclo
+- Renovacao automatica no dia do vencimento em UTC
+- Retry deterministico de cobranca ate 3 tentativas, com suspensao na 3a falha
+- Confiabilidade em multi instancia com lock no Postgres e idempotencia no consumidor
 
-Os requisitos base estao no enunciado do desafio.
+Inclui diferenciais opcionais:
+- RabbitMQ para cobranca assincrona
+- Outbox Pattern com retry, backoff e DEAD no banco
+- Redis para cache da assinatura ativa
+- Observabilidade com requestId e metricas Prometheus
 
-## Diferenciais incluidos (opcionais do desafio)
-- **RabbitMQ** para processamento assincrono de cobrancas
-- **Outbox Pattern** (PostgreSQL -> publisher -> RabbitMQ) com:
-  - `FOR UPDATE SKIP LOCKED` no publisher (seguro com multiplas instancias)
-  - retry/backoff deterministico
-  - transicao para **DEAD** apos `maxAttempts` (configuravel)
-- **Redis** para cache da assinatura ativa por usuario (TTL 60s)
-- **Observabilidade**
-  - logs estruturados com `requestId` (cabecalho `X-Request-Id`)
-  - Actuator + Micrometer com scrape **Prometheus**
+---
 
 ## Stack
 - Java 21
 - Spring Boot 3.x
 - PostgreSQL 16+
-- Liquibase (YAML)
-- JPA/Hibernate
-- Testes: JUnit 5 + Mockito + Testcontainers (Postgres + Rabbit quando aplicavel)
-- Docker Compose + Dockerfile
-
-## Pacote base
-- `br.com.ricarte.assinaflow`
+- Liquibase YAML
+- JPA Hibernate
+- Testes com JUnit 5, Mockito e Testcontainers
+- Docker Compose e Dockerfile
+- OpenAPI Swagger via Springdoc
+- Logs estruturados com correlacao via X Request Id
+- Actuator Micrometer Prometheus
 
 ---
 
-## Assuncoes de negocio (explicitas)
-1) **Timezone**: UTC para todos os calculos de data.
-2) **Semantica de `dataExpiracao`**: representa o **dia de cobranca** (billing date) e o limite do ciclo.
-   - O ciclo e interpretado como **[dataInicio, dataExpiracao)**.
-   - Em renovacao bem-sucedida:
-     - `dataInicio = dataExpiracao`
-     - `dataExpiracao = dataExpiracao + 1 mes`
-3) **Cancelamento**:
-   - status vira `CANCELAMENTO_AGENDADO`
-   - `autoRenew=false`
-   - o usuario mantem acesso ate `dataExpiracao`
-   - nao renova apos expirar
-4) **Retry de pagamento** (padrao seguro e deterministico):
-   - 1a falha -> proxima tentativa em +15 min
-   - 2a falha -> proxima tentativa em +60 min
-   - 3a falha -> `SUSPENSA` e `autoRenew=false`
-   - toda tentativa e persistida em `subscription_renewal_attempts`
-5) **Modo assincrono (RabbitMQ)**:
-   - publicacao e **at-least-once**
-   - consumidor e **idempotente** via constraint unica: `(subscription_id, cycle_expiration_date, attempt_number)`
-   - o publisher do outbox faz retry/backoff e marca como `DEAD` apos `maxAttempts`
-6) **Redis cache**:
-   - TTL 60s
-   - mutacoes (create/cancel/renew/suspend) fazem `evict` das chaves
+## Assuncoes (explicitas)
+1) Timezone: UTC para calculo de datas e vencimento
+2) Semantica de dataExpiracao: dia de cobranca e limite do ciclo
+    - Ciclo interpretado como intervalo [dataInicio, dataExpiracao)
+    - Renovacao bem sucedida move:
+        - dataInicio = dataExpiracao
+        - dataExpiracao = dataExpiracao + 1 mes
+3) Cancelamento:
+    - status vira CANCELAMENTO_AGENDADO
+    - autoRenew vira false
+    - dataExpiracao nao muda, nao corta acesso
+    - nao renova apos expirar, job diario finaliza para CANCELADA
+4) Retry de cobranca:
+    - 1a falha, proxima tentativa em +15 min
+    - 2a falha, proxima tentativa em +60 min
+    - 3a falha, status SUSPENSA e autoRenew false
+    - cada tentativa gera registro em subscription_renewal_attempts
+5) Modo assincrono:
+    - entrega at least once
+    - consumidor idempotente por constraint unica no banco
+    - outbox publisher reintenta e marca DEAD apos maxAttempts
+
+---
+
+## Endpoints
+Base URL: `http://localhost:8080`
+
+Swagger UI:
+- `/swagger-ui.html`
+
+OpenAPI JSON:
+- `/v3/api-docs`
+
+### Usuarios
+- POST `/api/v1/users`
+- GET `/api/v1/users/{userId}`
+- PUT `/api/v1/users/{userId}/payment-profile`
+
+### Assinaturas
+- POST `/api/v1/users/{userId}/subscriptions`
+- GET `/api/v1/users/{userId}/subscriptions/active`
+- GET `/api/v1/users/{userId}/subscriptions`
+- POST `/api/v1/users/{userId}/subscriptions/cancel`
+
+---
+
+## Persistencia
+Principais tabelas:
+- users
+- payment_profiles
+- subscriptions
+- subscription_renewal_attempts
+- outbox_events (extra, modo assincrono)
+
+Regras criticas no banco:
+- 1 assinatura ativa por usuario: indice unico parcial em subscriptions(user_id) para status ATIVA e CANCELAMENTO_AGENDADO
+- Idempotencia do consumidor: unique em subscription_renewal_attempts (subscription_id, cycle_expiration_date, attempt_number)
+
+---
+
+## Concorrencia e anti duplicidade
+Renovacao no banco usa row lock com SKIP LOCKED, seguro com 2 instancias:
+- Se duas instancias disputarem, apenas uma bloqueia e processa
+- A outra ignora as linhas bloqueadas e nao duplica renovacao
+
+No modo assincrono:
+- O scheduler enfileira via outbox
+- O publisher publica do outbox com SKIP LOCKED
+- O consumer aplica idempotencia no banco
 
 ---
 
 ## Observabilidade
-### Logs estruturados + correlacao
-- O filtro `RequestIdFilter` propaga/gera `X-Request-Id`.
-- O `requestId` entra no MDC e aparece nos logs.
+### Request Id
+- Cabecalho: `X-Request-Id`
+- Se nao vier, o servidor gera
+- O valor aparece nos logs no campo requestId
 
 ### Metricas
-- Prometheus: `GET /actuator/prometheus`
-- Catalogo: `GET /actuator/metrics`
+- Prometheus: `/actuator/prometheus`
+- Catalogo: `/actuator/metrics`
 
-Metricas customizadas (baixa cardinalidade):
-- `payment_charge_total{approved=...}`
-- `payment_charge_duration`
-- `renewal_attempt_total{success=...,mode=sync|async}`
-- `subscription_suspended_total{mode=...}`
-- `outbox_enqueued_total{eventType=...}`
-- `outbox_publish_total{success=...}`
-- `outbox_pending` (gauge)
-- `outbox_dead` (gauge)
+Metricas customizadas:
+- payment_charge_total
+- payment_charge_duration
+- renewal_attempt_total
+- subscription_suspended_total
+- outbox_enqueued_total
+- outbox_publish_total
+- outbox_pending
+- outbox_dead
 
 ---
 
 ## Perfis
-- **default**: async desabilitado, cache simples (in-memory)
-- **docker**: async habilitado, Redis habilitado, RabbitMQ habilitado
+- default: modo assincrono desabilitado, cache simple
+- docker: modo assincrono habilitado, Redis habilitado, RabbitMQ habilitado
 
 ---
 
-## Subir com Docker Compose
+## Como rodar com Docker Compose
 Na raiz do repositorio:
 
 ```bash
 docker compose up --build
-```
-
-- API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- RabbitMQ Management: http://localhost:15672 (usuario/senha: guest/guest)
-
-Parar e remover volumes:
-
-```bash
-docker compose down -v
-```
-
----
-
-## Demo em 5 minutos (modo assincrono: Outbox + RabbitMQ + Redis)
-> O `docker-compose.yml` ja sobe a aplicacao com `SPRING_PROFILES_ACTIVE=docker` e `APP_PAYMENTS_ASYNC_ENABLED=true`.
-
-### 1) Criar usuario
-
-```bash
-USER_ID=$(curl -s -X POST http://localhost:8080/api/v1/users \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","nome":"Demo","paymentProfile":{"behavior":"ALWAYS_APPROVE","failNextN":0}}' | jq -r .id)
-
-echo "USER_ID=$USER_ID"
-```
-
-### 2) Criar assinatura vencendo hoje (UTC)
-O objetivo aqui e criar uma assinatura cujo `dataExpiracao = hoje(UTC)`.
-
-- Linux (GNU date):
-
-```bash
-START_DATE=$(date -u -d '1 month ago' +%F)
-```
-
-- macOS (BSD date):
-
-```bash
-START_DATE=$(date -u -v -1m +%F)
-```
-
-Criar assinatura:
-
-```bash
-curl -i -X POST http://localhost:8080/api/v1/users/$USER_ID/subscriptions \
-  -H 'Content-Type: application/json' \
-  -d "{\"plano\":\"PREMIUM\",\"dataInicio\":\"$START_DATE\"}"
-```
-
-### 3) Validar renovacao
-O scheduler roda a cada 5 minutos (UTC). Em ate alguns minutos, valide:
-
-```bash
-curl -s http://localhost:8080/api/v1/users/$USER_ID/subscriptions/active | jq
-```
-
-Voce deve ver `dataExpiracao` avancar +1 mes apos a renovacao.
-
----
-
-## Playbook de validacao (manual)
-
-### A) Fluxo assincrono ponta a ponta (Outbox -> RabbitMQ -> Consumer -> Renew)
-1) Crie uma assinatura vencendo hoje (ver demo acima).
-2) Acompanhe logs do container `app`:
-
-```bash
-docker compose logs -f app
-```
-
-### B) Outbox retry/backoff e DEAD-letter quando o broker esta fora
-Objetivo: provar que o outbox **sobrevive a indisponibilidade do RabbitMQ** e nao perde eventos.
-
-1) Pare o RabbitMQ:
-
-```bash
-docker compose stop rabbitmq
-```
-
-2) Crie uma assinatura vencendo hoje (ou reutilize uma ja vencendo hoje).
-
-3) Inspecione o outbox no Postgres (deve permanecer PENDING e reagendar com backoff):
-
-```bash
-docker compose exec postgres psql -U subscriptions -d subscriptions -c "
-select id, event_type, status, publish_attempts, next_attempt_at, dead_at, left(last_error,120) as last_error
-from outbox_events
-order by created_at desc
-limit 10;"
-```
-
-4) Suba o RabbitMQ novamente:
-
-```bash
-docker compose start rabbitmq
-```
-
-5) Aguarde alguns segundos e revalide o outbox:
-- status deve virar `SENT`
-- a assinatura deve ser renovada
-
-#### Demo acelerada de DEAD (opcional)
-Por padrao `maxAttempts=10`. Para chegar em DEAD rapidamente, ajuste no `docker-compose.yml`:
-
-```yml
-APP_OUTBOX_PUBLISHER_MAX_ATTEMPTS: "3"
-```
-
-Rebuild/restart:
-
-```bash
-docker compose up --build
-```
-
-Mantenha o RabbitMQ parado e observe a transicao para `DEAD`.
-
-### C) Validar cache Redis (assinatura ativa)
-1) Chame o endpoint de assinatura ativa repetidas vezes:
-
-```bash
-curl -s http://localhost:8080/api/v1/users/$USER_ID/subscriptions/active | jq
-curl -s http://localhost:8080/api/v1/users/$USER_ID/subscriptions/active | jq
-```
-
-2) Dispare uma mutacao (cancelar) e valide que o cache foi invalidado:
-
-```bash
-curl -s -X POST http://localhost:8080/api/v1/users/$USER_ID/subscriptions/cancel | jq
-curl -s http://localhost:8080/api/v1/users/$USER_ID/subscriptions/active | jq
-```
-
-### D) Metricas
-Prometheus scrape:
-
-```bash
-curl -s http://localhost:8080/actuator/prometheus | head
-```
-
-Gauges do outbox:
-
-```bash
-curl -s http://localhost:8080/actuator/metrics/outbox_pending | jq
-curl -s http://localhost:8080/actuator/metrics/outbox_dead | jq
-```
-
----
-
-## Rodar local (sem Docker)
-Pre-requisitos: Java 21 + Maven + Postgres 16+.
-
-```bash
-cd backend
-mvn clean test
-mvn spring-boot:run
-```
-
-Variaveis (se nao usar defaults):
-
-```bash
-export DB_URL=jdbc:postgresql://localhost:5432/subscriptions
-export DB_USERNAME=subscriptions
-export DB_PASSWORD=subscriptions
-```
-
----
-
-## Testes
-> Testcontainers requer Docker instalado na sua maquina.
-
-Rodar tudo:
-
-```bash
-cd backend
-mvn test
-```
-
-Rodar somente o fluxo assincrono (RabbitMQ + Outbox + Consumer):
-
-```bash
-cd backend
-mvn -Dtest=AsyncPaymentsIntegrationTest test
-```
-
-Rodar somente o teste de resiliencia do Outbox (broker fora -> retry -> DEAD):
-
-```bash
-cd backend
-mvn -Dtest=OutboxRetryDeadLetterIntegrationTest test
-```
-
----
-
-## Concorrencia (evitar renovacao duplicada)
-- O job de renovacao usa row-lock no Postgres com `FOR UPDATE SKIP LOCKED`.
-- Cada assinatura e processada em transacao isolada (`REQUIRES_NEW`).
-- No modo async, o job tambem usa `renewal_in_flight_until` para evitar enfileiramento repetido enquanto a mensagem esta em voo.
-
----
-
-## Trade-offs e alternativas
-- `@Scheduled` vs Quartz: `@Scheduled` reduz pegada e atende ao desafio. Quartz e superior para misfire handling, clustering e schedules complexos.
-- Pagamento sincrono vs assincrono: sincrono e mais simples; assincrono melhora resiliencia quando o provedor e lento/instavel.
-- Outbox at-least-once: evita perda de mensagem; exige consumidor idempotente (feito via constraint no banco).
