@@ -7,8 +7,8 @@ Requisitos atendidos conforme o enunciado do desafio.
 
 ---
 
-## Checklist rapido do avaliador (10 linhas)
-1. Suba: `docker compose up --build`
+## Checklist rapido do avaliador (11 linhas)
+1. Suba: `docker compose up --build` (na raiz; ativa perfil **`docker`** com Redis, RabbitMQ e cobranca assincrona)
 2. Swagger: `http://localhost:8080/swagger-ui.html`
 3. Crie usuario: `POST /api/v1/users`
 4. Crie assinatura: `POST /api/v1/users/{userId}/subscriptions`
@@ -17,7 +17,15 @@ Requisitos atendidos conforme o enunciado do desafio.
 7. Renovacao no vencimento UTC: crie assinatura vencendo hoje e verifique expiracao +1 mes
 8. Falha 3x suspende: ajuste paymentProfile para ALWAYS_DECLINE e valide status SUSPENSA
 9. Metricas: `GET /actuator/prometheus`
-10. Testes: `cd backend && mvn test`
+10. Testes rapidos (sem Docker): na pasta `backend`, `mvn test` ou `test` no IDE usando o projeto Maven
+11. Suíte cheia incluindo Testcontainers: mesma pasta, `mvn verify -P integration-tests` (requer Docker funcionando para o cliente usado pela JVM — em CI/Linux costuma estar ok)
+
+---
+
+## Ferramentas (build e testes)
+- **Java:** 21 (Temurin ou equivalente recomendado)
+- **Maven:** 3.9+, instalacao no sistema; nao há `mvnw` neste repositorio (`mvn test` deve resolver o projeto em `backend/`)
+- **Docker / Docker Compose:** para subir a stack (`docker compose up`) e para os testes de integracao (`Testcontainers`); o comando `compose` deve ser o mesmo que o Compose V2 distribuido pelo Docker CLI
 
 ---
 
@@ -44,7 +52,7 @@ Inclui diferenciais opcionais:
 - PostgreSQL 16+
 - Liquibase YAML
 - JPA Hibernate
-- Testes com JUnit 5, Mockito e Testcontainers
+- Testes com JUnit 5, Mockito e Testcontainers (integracao marcada com tag `integration`; padrao do Maven ignora esse grupo até `-P integration-tests`)
 - Docker Compose e Dockerfile
 - OpenAPI Swagger via Springdoc
 - Logs estruturados com correlacao via X Request Id
@@ -147,8 +155,21 @@ Metricas customizadas:
 ---
 
 ## Perfis
-- default: modo assincrono desabilitado, cache simple
-- docker: modo assincrono habilitado, Redis habilitado, RabbitMQ habilitado
+- **default**: modo assincrono desabilitado, cache simples
+- **docker** (`SPRING_PROFILES_ACTIVE=docker` no Compose): modo assincrono habilitado, Redis habilitado, RabbitMQ habilitado
+
+---
+
+## Testes (Maven)
+
+| Objetivo | Comando (`cd backend`) |
+|----------|-------------------------|
+| Apenas rapido (JUnit sem tag `integration`) | `mvn test` |
+| Compilacao + testes incluindo Testcontainers | `mvn verify -P integration-tests` |
+
+Por padrao, `integration` fica **excluido** pelo Surefire: desenvolvedores sem Docker continuam rodando `mvn test` em ciclo rapido.
+
+Se `-P integration-tests` falhar com erro de cliente Docker na JVM, atualize Docker Engine/Desktop ou configure o cliente exigido pelo `docker-java` usado pelo Testcontainers; em runners Linux típicos (por exemplo Ubuntu no GitHub Actions) o comando acima deve passar quando o daemon Docker esta disponível.
 
 ---
 
@@ -157,3 +178,8 @@ Na raiz do repositorio:
 
 ```bash
 docker compose up --build
+```
+
+O servico `app` monta backend com `SPRING_PROFILES_ACTIVE=docker`, Postgres, Redis e RabbitMQ (`5672`; interface de gerencia em `http://localhost:15672`, credenciais `guest`/`guest`).
+
+Portas liberadas tambem incluem Postgres `5432` e Redis `6379` quando precisar de clientes externos.
