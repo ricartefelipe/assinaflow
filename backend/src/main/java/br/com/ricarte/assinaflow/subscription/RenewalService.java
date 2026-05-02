@@ -242,7 +242,7 @@ public class RenewalService {
             return;
         }
 
-        Duration backoff = backoffForAttempt(attemptNumber);
+        Duration backoff = RenewalBackoff.afterFailedAttempt(attemptNumber);
         s.setNextRenewalAttemptAt(now.plus(backoff));
         s.setRenewalInFlightUntil(null);
         subscriptionRepository.save(s);
@@ -250,13 +250,5 @@ public class RenewalService {
 
         log.info("renewal failed subscriptionId={} userId={} attempt={} nextAttemptAt={}",
                 s.getId(), s.getUserId(), attemptNumber, s.getNextRenewalAttemptAt());
-    }
-
-    private static Duration backoffForAttempt(int attemptNumber) {
-        return switch (attemptNumber) {
-            case 1 -> Duration.ofMinutes(15);
-            case 2 -> Duration.ofMinutes(60);
-            default -> Duration.ZERO;
-        };
     }
 }

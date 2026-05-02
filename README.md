@@ -3,7 +3,7 @@ Sistema de gestao de assinaturas para streaming, com renovacao automatica no ven
 
 Base package: `br.com.ricarte.assinaflow`
 
-Requisitos atendidos conforme enunciado do desafio. :contentReference[oaicite:0]{index=0}
+Requisitos atendidos conforme o enunciado do desafio.
 
 ---
 
