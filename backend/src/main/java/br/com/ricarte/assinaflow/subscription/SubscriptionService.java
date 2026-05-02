@@ -47,7 +47,7 @@ public class SubscriptionService {
 
         if (subscriptionRepository.existsByUserIdAndStatusIn(userId, ACTIVE_STATUSES)) {
             throw new ConflictException("SUBSCRIPTION_ALREADY_ACTIVE",
-                    "Usuario ja possui uma assinatura ativa (ou cancelamento agendado)." );
+                    "Usuario ja possui uma assinatura ativa (ou cancelamento agendado).");
         }
 
         LocalDate start = req.getDataInicio() != null ? req.getDataInicio() : timeProvider.todayUtc();
@@ -68,7 +68,7 @@ public class SubscriptionService {
             s = subscriptionRepository.save(s);
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("SUBSCRIPTION_ALREADY_ACTIVE",
-                    "Usuario ja possui uma assinatura ativa (ou cancelamento agendado)." );
+                    "Usuario ja possui uma assinatura ativa (ou cancelamento agendado).");
         } finally {
             subscriptionCache.evictActive(userId);
         }
