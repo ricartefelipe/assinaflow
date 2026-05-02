@@ -6,6 +6,7 @@ import br.com.ricarte.assinaflow.outbox.OutboxRepository;
 import br.com.ricarte.assinaflow.outbox.OutboxStatus;
 import br.com.ricarte.assinaflow.subscription.PaymentChargeRequested;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("integration")
 @Testcontainers
 @SpringBootTest(classes = {AssinaFlowApplication.class})
 @TestPropertySource(properties = {
