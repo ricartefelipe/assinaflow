@@ -5,7 +5,7 @@
 
     <groupId>br.com.ricarte</groupId>
     <artifactId>assinaflow</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <name>AssinaFlow</name>
     <description>Sistema de gestao de assinaturas (Spring Boot 3 / Java 21)</description>
 
