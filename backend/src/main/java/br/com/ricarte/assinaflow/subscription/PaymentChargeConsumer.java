@@ -63,6 +63,7 @@ public class PaymentChargeConsumer {
         if (!currentCycleExpiration.equals(msg.cycleExpirationDate())) {
             s.setRenewalInFlightUntil(null);
             subscriptionRepository.save(s);
+            subscriptionCache.evictActive(s.getUserId());
             return;
         }
 
@@ -71,6 +72,7 @@ public class PaymentChargeConsumer {
                 s.getId(), msg.cycleExpirationDate(), msg.attemptNumber())) {
             s.setRenewalInFlightUntil(null);
             subscriptionRepository.save(s);
+            subscriptionCache.evictActive(s.getUserId());
             return;
         }
 
@@ -128,7 +130,7 @@ public class PaymentChargeConsumer {
             return;
         }
 
-        Duration backoff = backoffForAttempt(attemptNumber);
+        Duration backoff = RenewalBackoff.afterFailedAttempt(attemptNumber);
         s.setNextRenewalAttemptAt(now.plus(backoff));
         s.setRenewalInFlightUntil(null);
         subscriptionRepository.save(s);
@@ -136,13 +138,5 @@ public class PaymentChargeConsumer {
 
         log.info("payment declined subscriptionId={} userId={} attempt={} nextAttemptAt={}",
                 s.getId(), s.getUserId(), attemptNumber, s.getNextRenewalAttemptAt());
-    }
-
-    private static Duration backoffForAttempt(int attemptNumber) {
-        return switch (attemptNumber) {
-            case 1 -> Duration.ofMinutes(15);
-            case 2 -> Duration.ofMinutes(60);
-            default -> Duration.ZERO;
-        };
     }
 }

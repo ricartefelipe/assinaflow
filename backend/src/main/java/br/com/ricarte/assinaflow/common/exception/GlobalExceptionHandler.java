@@ -26,11 +26,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleApiException(ApiException ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
         pd.setTitle(ex.getStatus().getReasonPhrase());
-        pd.setType(URI.create("about:blank"));
-        pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", ex.getCode());
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("requestId", MDC.get("requestId"));
+        augmentProblem(pd, request, ex.getCode());
         return pd;
     }
 
@@ -38,11 +34,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         pd.setTitle("Bad Request");
-        pd.setType(URI.create("about:blank"));
-        pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", "VALIDATION_ERROR");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("requestId", MDC.get("requestId"));
+        augmentProblem(pd, request, "VALIDATION_ERROR");
 
         Map<String, String> violations = new HashMap<>();
         for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
@@ -56,11 +48,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Constraint violation");
         pd.setTitle("Bad Request");
-        pd.setType(URI.create("about:blank"));
-        pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", "VALIDATION_ERROR");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("requestId", MDC.get("requestId"));
+        augmentProblem(pd, request, "VALIDATION_ERROR");
         pd.setProperty("detail", ex.getMessage());
         return pd;
     }
@@ -69,11 +57,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Data integrity violation");
         pd.setTitle("Conflict");
-        pd.setType(URI.create("about:blank"));
-        pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", "DATA_INTEGRITY_VIOLATION");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("requestId", MDC.get("requestId"));
+        augmentProblem(pd, request, "DATA_INTEGRITY_VIOLATION");
         return pd;
     }
 
@@ -81,11 +65,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Malformed JSON");
         pd.setTitle("Bad Request");
-        pd.setType(URI.create("about:blank"));
-        pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", "MALFORMED_JSON");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("requestId", MDC.get("requestId"));
+        augmentProblem(pd, request, "MALFORMED_JSON");
         return pd;
     }
 
@@ -102,11 +82,15 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error");
         pd.setTitle("Internal Server Error");
+        augmentProblem(pd, request, "INTERNAL_ERROR");
+        return pd;
+    }
+
+    private static void augmentProblem(ProblemDetail pd, HttpServletRequest request, String code) {
         pd.setType(URI.create("about:blank"));
         pd.setInstance(URI.create(request.getRequestURI()));
-        pd.setProperty("code", "INTERNAL_ERROR");
+        pd.setProperty("code", code);
         pd.setProperty("timestamp", Instant.now().toString());
         pd.setProperty("requestId", MDC.get("requestId"));
-        return pd;
     }
 }
