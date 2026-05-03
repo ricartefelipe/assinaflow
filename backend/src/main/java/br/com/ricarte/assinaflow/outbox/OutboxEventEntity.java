@@ -2,6 +2,9 @@ package br.com.ricarte.assinaflow.outbox;
 
 import jakarta.persistence.*;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ public class OutboxEventEntity {
     @Column(name = "idempotency_key", nullable = false, length = 200)
     private String idempotencyKey;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;
 
