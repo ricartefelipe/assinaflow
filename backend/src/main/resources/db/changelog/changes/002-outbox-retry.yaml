@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 002-001-outbox-add-retry-columns
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - addColumn:
             tableName: outbox_events
@@ -21,7 +21,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 002-002-outbox-index-next-attempt
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createIndex:
             tableName: outbox_events

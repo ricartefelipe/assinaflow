@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 001-001-create-users
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createTable:
             tableName: users
@@ -42,7 +42,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 001-002-create-payment-profiles
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createTable:
             tableName: payment_profiles
@@ -87,7 +87,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 001-003-create-subscriptions
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createTable:
             tableName: subscriptions
@@ -196,7 +196,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 001-004-partial-unique-active-subscription
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - sql:
             sql: >
@@ -206,7 +206,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 001-005-create-renewal-attempts
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createTable:
             tableName: subscription_renewal_attempts
@@ -282,7 +282,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 001-006-create-outbox-events
-      author: chatgpt
+      author: ricartefelipe
       changes:
         - createTable:
             tableName: outbox_events
