@@ -3,23 +3,6 @@ Sistema de gestao de assinaturas para streaming, com renovacao automatica no ven
 
 Base package: `br.com.ricarte.assinaflow`
 
-Requisitos atendidos conforme o enunciado do desafio.
-
----
-
-## Checklist rapido do avaliador (11 linhas)
-1. Suba: `docker compose up --build` (na raiz; ativa perfil **`docker`** com Redis, RabbitMQ e cobranca assincrona)
-2. Swagger: `http://localhost:8080/swagger-ui.html`
-3. Crie usuario: `POST /api/v1/users`
-4. Crie assinatura: `POST /api/v1/users/{userId}/subscriptions`
-5. Impede 2 ativas: segunda criacao retorna 409
-6. Cancelamento: `POST /api/v1/users/{userId}/subscriptions/cancel` e mantem ate expirar
-7. Renovacao no vencimento UTC: crie assinatura vencendo hoje e verifique expiracao +1 mes
-8. Falha 3x suspende: ajuste paymentProfile para ALWAYS_DECLINE e valide status SUSPENSA
-9. Metricas: `GET /actuator/prometheus`
-10. Testes rapidos (sem Docker): na pasta `backend`, `mvn test` ou `test` no IDE usando o projeto Maven
-11. Suíte cheia incluindo Testcontainers: mesma pasta, `mvn verify -P integration-tests` (requer Docker funcionando para o cliente usado pela JVM — em CI/Linux costuma estar ok)
-
 ---
 
 ## Ferramentas (build e testes)
