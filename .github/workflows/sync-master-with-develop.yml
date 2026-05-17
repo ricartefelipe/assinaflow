@@ -1,15 +1,10 @@
 name: Sync master with develop
 
-# Após cada push em `develop`, avança `master` para o mesmo commit (`reset --hard`
-# para `origin/develop` + push com `--force-with-lease`).
+# Integra os commits de develop em master via Merge API do GitHub (merge commit sem force-push).
+# Serve quando master está protegida contra push direto / force-push do GITHUB_TOKEN.
 #
-# Árvores de `master` e `develop` ficam sempre iguais após esta corrida — não é
-# necessário abrir PR só para “alinhar branches”; PRs repetidos desenvolvimento ↔
-# master apenas empilham merges vazios. Use PR quando houver código a rever; para
-# alinhar ponteiros, pode também correr este workflow manualmente (workflow_dispatch).
-#
-# A decisão de release continua a ser humana; isto apenas evita `master` ficar
-# visualmente atrás quando o trabalho habitual é em `develop`.
+# Se o merge falhar (ex.: obrigatório review humano sem bypass para Actions), ajustar as regras
+# da branch ou fazer merge develop → master manualmente no GitHub.
 
 on:
   push:
@@ -24,17 +19,40 @@ permissions:
   contents: write
 
 jobs:
-  sync:
+  merge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Advance master to match develop
+      - name: Integrar develop em master (Merge API)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch origin master develop
-          git checkout master
-          git reset --hard origin/develop
-          git push origin master --force-with-lease
+
+          MASTER=$(git rev-parse origin/master)
+          DEV=$(git rev-parse origin/develop)
+
+          if [[ "$MASTER" == "$DEV" ]]; then
+            echo "master já aponta para o mesmo commit que develop."
+            exit 0
+          fi
+
+          if gh api "repos/${{ github.repository }}/merges" \
+            --method POST \
+            -f base=master \
+            -f head=develop \
+            -f commit_title='Merge branch develop into master (sync automático)' \
+            -f commit_message='Synchronization via Actions after push to develop.' \
+            >/dev/null; then
+            echo "Merge concluído com sucesso."
+            exit 0
+          fi
+
+          echo "::error ::POST /merges falhou (provável causa: branch rules na master)."
+          echo "Possíveis correcções: permitir merges via GitHub Actions na ruleset,"
+          echo "ou abrir/manualmente um PR develop → master e fazer merge."
+          exit 1
