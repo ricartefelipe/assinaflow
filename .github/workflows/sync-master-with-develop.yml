@@ -1,10 +1,11 @@
 name: Sync master with develop
 
-# Integra os commits de develop em master via Merge API do GitHub (merge commit sem force-push).
-# Serve quando master está protegida contra push direto / force-push do GITHUB_TOKEN.
+# Como a master está protegida (merge só via PR), criamos/atualizamos um PR develop → master e
+# fazemos merge com o próprio GITHUB_TOKEN. Isto substitui o force-push.
 #
-# Se o merge falhar (ex.: obrigatório review humano sem bypass para Actions), ajustar as regras
-# da branch ou fazer merge develop → master manualmente no GitHub.
+# Requisitos nas branch rules da master:
+# - sem reviews obrigatórios para este cenário OU bypass para github-actions — caso contrário
+#   gh pr merge falha e será preciso configurar approvals/bypass nos rulesets.
 
 on:
   push:
@@ -17,6 +18,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   merge:
@@ -26,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Integrar develop em master (Merge API)
+      - name: Abrir ou reutilizar PR develop → master e fazer merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -41,18 +43,23 @@ jobs:
             exit 0
           fi
 
-          if gh api "repos/${{ github.repository }}/merges" \
-            --method POST \
-            -f base=master \
-            -f head=develop \
-            -f commit_title='Merge branch develop into master (sync automático)' \
-            -f commit_message='Synchronization via Actions after push to develop.' \
-            >/dev/null; then
-            echo "Merge concluído com sucesso."
-            exit 0
+          REPO="${{ github.repository }}"
+
+          OPEN=$(gh pr list --repo "$REPO" --base master --head develop --state open --json number -q '.[0].number // empty')
+          if [[ -z "${OPEN:-}" ]] || [[ "$OPEN" == "null" ]]; then
+            gh pr create \
+              --repo "$REPO" \
+              --base master \
+              --head develop \
+              --title 'chore(sync): alinhar master com develop [automático]' \
+              --body 'Criado automaticamente pelo workflow *Sync master with develop*. Pode ignorar revisão manual se merge passar só com Actions.'
           fi
 
-          echo "::error ::POST /merges falhou (provável causa: branch rules na master)."
-          echo "Possíveis correcções: permitir merges via GitHub Actions na ruleset,"
-          echo "ou abrir/manualmente um PR develop → master e fazer merge."
-          exit 1
+          PR=$(gh pr list --repo "$REPO" --base master --head develop --state open --json number -q '.[0].number')
+
+          echo "Fazendo merge do PR #$PR"
+          gh pr merge "$PR" --repo "$REPO" --merge || {
+            echo "::error ::gh pr merge falhou (reviews obrigatórios, falta de permissão ou conflitos)."
+            echo "Ajuste das rules na master ou faça merge manual do PR #$PR."
+            exit 1
+          }
