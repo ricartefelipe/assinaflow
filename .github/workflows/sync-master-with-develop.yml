@@ -1,11 +1,18 @@
 name: Sync master with develop
 
-# Como a master está protegida (merge só via PR), criamos/atualizamos um PR develop → master e
-# fazemos merge com o próprio GITHUB_TOKEN. Isto substitui o force-push.
+# Fluxo recomendado: PR develop → master e merge pelo gh.
 #
-# Requisitos nas branch rules da master:
-# - sem reviews obrigatórios para este cenário OU bypass para github-actions — caso contrário
-#   gh pr merge falha e será preciso configurar approvals/bypass nos rulesets.
+# Precisa de UM dos seguintes (fora deste YAML):
+#
+# A) Repositório → Settings → Actions → General → Workflow permissions:
+#    - marcado «Read and write»
+#    - marcado «Allow GitHub Actions to create and approve pull requests»
+#
+# OU
+#
+# B) Criar secret SYNC_REPO_PAT (Classic PAT com scopes repo + workflow, ou PAT fine-grained
+#    com leitura/escrita de conteúdo e Pull requests neste repo). Este token substitui
+#    GITHUB_TOKEN no passo seguinte quando definido.
 
 on:
   push:
@@ -30,9 +37,19 @@ jobs:
 
       - name: Abrir ou reutilizar PR develop → master e fazer merge
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_REPO_PAT: ${{ secrets.SYNC_REPO_PAT }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [[ -n "${SYNC_REPO_PAT:-}" ]]; then
+            export GH_TOKEN="$SYNC_REPO_PAT"
+            echo "GH token: usando secret SYNC_REPO_PAT"
+          else
+            export GH_TOKEN="$FALLBACK_TOKEN"
+            echo "GH token: usando secrets.GITHUB_TOKEN (requere permissões de PR nas Actions)"
+          fi
+
           git fetch origin master develop
 
           MASTER=$(git rev-parse origin/master)
@@ -43,23 +60,21 @@ jobs:
             exit 0
           fi
 
-          REPO="${{ github.repository }}"
-
-          OPEN=$(gh pr list --repo "$REPO" --base master --head develop --state open --json number -q '.[0].number // empty')
+          OPEN=$(gh pr list --repo "$REPOSITORY" --base master --head develop --state open --json number -q '.[0].number // empty')
           if [[ -z "${OPEN:-}" ]] || [[ "$OPEN" == "null" ]]; then
             gh pr create \
-              --repo "$REPO" \
+              --repo "$REPOSITORY" \
               --base master \
               --head develop \
               --title 'chore(sync): alinhar master com develop [automático]' \
-              --body 'Criado automaticamente pelo workflow *Sync master with develop*. Pode ignorar revisão manual se merge passar só com Actions.'
+              --body $'Criado automaticamente pelo workflow *Sync master with develop*.'
           fi
 
-          PR=$(gh pr list --repo "$REPO" --base master --head develop --state open --json number -q '.[0].number')
+          PR=$(gh pr list --repo "$REPOSITORY" --base master --head develop --state open --json number -q '.[0].number')
 
           echo "Fazendo merge do PR #$PR"
-          gh pr merge "$PR" --repo "$REPO" --merge || {
-            echo "::error ::gh pr merge falhou (reviews obrigatórios, falta de permissão ou conflitos)."
-            echo "Ajuste das rules na master ou faça merge manual do PR #$PR."
+          gh pr merge "$PR" --repo "$REPOSITORY" --merge || {
+            echo "::error ::gh pr merge falhou (permissões, reviews obrigatórios ou conflitos)."
+            echo "Consulte os comentários no topo deste workflow (Settings → Actions ou secret SYNC_REPO_PAT)."
             exit 1
           }
