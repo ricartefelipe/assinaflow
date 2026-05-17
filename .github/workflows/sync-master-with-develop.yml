@@ -14,16 +14,13 @@ name: Sync master with develop
 #    com leitura/escrita de conteúdo e Pull requests neste repo). Este token substitui
 #    GITHUB_TOKEN no passo seguinte quando definido.
 #
-# C) Quando A) ou B) estiverem activos e o job deixar de falhar nos checks obrigatórios,
-#    podes voltar a descomentar o bloco `push:` abaixo para sincronização automática em
-#    cada alteração ao develop.
+# C) Com A) ou B) activos (permissões Actions ou secret SYNC_REPO_PAT), este workflow
+#    volta a despachar em cada push ao develop sem falhar checks.
 
 on:
+  push:
+    branches: [develop]
   workflow_dispatch:
-
-# Automático (voltar a activar após configurar permissões ou SYNC_REPO_PAT):
-# push:
-#   branches: [develop]
 
 concurrency:
   group: sync-master-with-develop
