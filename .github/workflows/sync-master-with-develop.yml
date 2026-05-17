@@ -1,7 +1,15 @@
 name: Sync master with develop
 
-# Mantém master no mesmo commit que develop após cada push em develop
-# (release continua a ser decisão humana; isto evita master ficar atrás).
+# Após cada push em `develop`, avança `master` para o mesmo commit (`reset --hard`
+# para `origin/develop` + push com `--force-with-lease`).
+#
+# Árvores de `master` e `develop` ficam sempre iguais após esta corrida — não é
+# necessário abrir PR só para “alinhar branches”; PRs repetidos desenvolvimento ↔
+# master apenas empilham merges vazios. Use PR quando houver código a rever; para
+# alinhar ponteiros, pode também correr este workflow manualmente (workflow_dispatch).
+#
+# A decisão de release continua a ser humana; isto apenas evita `master` ficar
+# visualmente atrás quando o trabalho habitual é em `develop`.
 
 on:
   push:
