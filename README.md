@@ -3,6 +3,8 @@ Sistema de gestao de assinaturas para streaming, com renovacao automatica no ven
 
 Base package: `br.com.ricarte.assinaflow`
 
+---
+
 ## Ferramentas (build e testes)
 - **Java:** 21 (Temurin ou equivalente recomendado)
 - **Maven:** 3.9+, instalacao no sistema; nao há `mvnw` neste repositorio (`mvn test` deve resolver o projeto em `backend/`)
