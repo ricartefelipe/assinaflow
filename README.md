@@ -121,6 +121,13 @@ npm run dev
 
 Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar (cobra via gateway) → conta (status e cancelamento).
 
+Smoke e2e (Playwright), com a API em `http://localhost:8080`:
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
 Variaveis uteis da API:
 - `JWT_SECRET` (minimo 32 caracteres)
 - `APP_CORS_ORIGINS` (padrao inclui `http://localhost:5173`)
