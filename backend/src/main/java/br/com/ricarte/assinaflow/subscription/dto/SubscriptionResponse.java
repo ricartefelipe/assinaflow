@@ -16,6 +16,7 @@ public class SubscriptionResponse {
     private SubscriptionStatus status;
     private boolean autoRenew;
     private int renewalFailures;
+    private int creditoRenovacaoCentavos;
     private Instant nextRenewalAttemptAt;
 
     public UUID getId() {
@@ -80,6 +81,14 @@ public class SubscriptionResponse {
 
     public void setRenewalFailures(int renewalFailures) {
         this.renewalFailures = renewalFailures;
+    }
+
+    public int getCreditoRenovacaoCentavos() {
+        return creditoRenovacaoCentavos;
+    }
+
+    public void setCreditoRenovacaoCentavos(int creditoRenovacaoCentavos) {
+        this.creditoRenovacaoCentavos = creditoRenovacaoCentavos;
     }
 
     public Instant getNextRenewalAttemptAt() {

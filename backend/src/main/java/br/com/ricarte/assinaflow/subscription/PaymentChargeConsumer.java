@@ -97,6 +97,7 @@ public class PaymentChargeConsumer {
             s.setStartDate(currentCycleExpiration);
             s.setExpirationDate(currentCycleExpiration.plusMonths(1));
             s.setRenewalFailures(0);
+            s.setRenewalCreditCents(0);
             s.setNextRenewalAttemptAt(null);
             s.setRenewalInFlightUntil(null);
 

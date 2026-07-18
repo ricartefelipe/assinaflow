@@ -29,19 +29,22 @@ public class SubscriptionService {
     private final TimeProvider timeProvider;
     private final SubscriptionCache subscriptionCache;
     private final PaymentService paymentService;
+    private final ProrationService prorationService;
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
             TimeProvider timeProvider,
             SubscriptionCache subscriptionCache,
-            PaymentService paymentService
+            PaymentService paymentService,
+            ProrationService prorationService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.timeProvider = timeProvider;
         this.subscriptionCache = subscriptionCache;
         this.paymentService = paymentService;
+        this.prorationService = prorationService;
     }
 
     @Transactional
@@ -210,6 +213,28 @@ public class SubscriptionService {
             throw new BadRequestException("PLAN_UNCHANGED", "A assinatura ja esta neste plano.");
         }
 
+        LocalDate today = timeProvider.todayUtc();
+        int delta = prorationService.proratedDeltaCents(
+                s.getPlan(), req.getPlano(), s.getStartDate(), s.getExpirationDate(), today
+        );
+
+        if (delta > 0) {
+            PaymentResult payment = paymentService.charge(
+                    userId,
+                    delta,
+                    "change-plan|" + s.getId() + "|" + req.getPlano() + "|" + today,
+                    "Upgrade para " + req.getPlano()
+            );
+            if (!payment.isApproved()) {
+                throw new BadRequestException(
+                        payment.errorCode() != null ? payment.errorCode() : "PAYMENT_DECLINED",
+                        payment.errorMessage() != null ? payment.errorMessage() : "Pagamento recusado."
+                );
+            }
+        } else if (delta < 0) {
+            s.setRenewalCreditCents(s.getRenewalCreditCents() + (-delta));
+        }
+
         s.setPlan(req.getPlano());
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);
@@ -232,6 +257,7 @@ public class SubscriptionService {
         r.setStatus(s.getStatus());
         r.setAutoRenew(s.isAutoRenew());
         r.setRenewalFailures(s.getRenewalFailures());
+        r.setCreditoRenovacaoCentavos(s.getRenewalCreditCents());
         r.setNextRenewalAttemptAt(s.getNextRenewalAttemptAt());
         return r;
     }

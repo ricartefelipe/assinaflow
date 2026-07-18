@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-001-subscription-renewal-credit
+      author: ricartefelipe
+      changes:
+        - addColumn:
+            tableName: subscriptions
+            columns:
+              - column:
+                  name: renewal_credit_cents
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

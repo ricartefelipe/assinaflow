@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
@@ -43,6 +44,9 @@ class SubscriptionServiceTest {
 
     @Mock
     PaymentService paymentService;
+
+    @Spy
+    ProrationService prorationService = new ProrationService();
 
     @InjectMocks
     SubscriptionService subscriptionService;
@@ -279,12 +283,44 @@ class SubscriptionServiceTest {
         when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
                 userId, SubscriptionStatus.ATIVA))
                 .thenReturn(Optional.of(s));
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-03-20"));
+        when(paymentService.charge(eq(userId), anyInt(), any(), any()))
+                .thenReturn(PaymentResult.approved());
         when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var resp = subscriptionService.changePlan(userId, req);
         assertThat(resp.getPlano()).isEqualTo(Plan.PREMIUM);
         assertThat(resp.getDataExpiracao()).isEqualTo(LocalDate.parse("2025-04-10"));
+        verify(paymentService).charge(eq(userId), anyInt(), any(), any());
         verify(subscriptionCache).evictActive(userId);
+    }
+
+    @Test
+    void changePlanShouldCreditOnDowngrade() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.PREMIUM);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.ATIVA);
+        s.setRenewalCreditCents(0);
+
+        ChangePlanRequest req = new ChangePlanRequest();
+        req.setPlano(Plan.BASICO);
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.ATIVA))
+                .thenReturn(Optional.of(s));
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-03-20"));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resp = subscriptionService.changePlan(userId, req);
+        assertThat(resp.getPlano()).isEqualTo(Plan.BASICO);
+        assertThat(resp.getCreditoRenovacaoCentavos()).isGreaterThan(0);
+        verify(paymentService, never()).charge(any(), anyInt(), any(), any());
     }
 
     @Test

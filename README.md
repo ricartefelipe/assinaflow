@@ -99,7 +99,7 @@ OpenAPI JSON:
 - POST `/api/v1/users/{userId}/subscriptions/cancel` (JWT + ownership)
 - POST `/api/v1/users/{userId}/subscriptions/resume` (JWT + ownership)
 - POST `/api/v1/users/{userId}/subscriptions/reactivate` (JWT + ownership)
-- POST `/api/v1/users/{userId}/subscriptions/change-plan` (JWT + ownership)
+- POST `/api/v1/users/{userId}/subscriptions/change-plan` (JWT + ownership; proration no upgrade/crédito no downgrade)
 
 ---
 

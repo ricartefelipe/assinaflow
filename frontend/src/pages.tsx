@@ -241,6 +241,9 @@ export function ContaPage() {
             <h3>{planLabel(subscription.plano)}</h3>
             <p className="muted">
               Ciclo de {subscription.dataInicio} até {subscription.dataExpiracao}.
+              {(subscription.creditoRenovacaoCentavos ?? 0) > 0 && (
+                <> Crédito na próxima renovação: {formatPrice(subscription.creditoRenovacaoCentavos!)}.</>
+              )}
               {subscription.status === 'CANCELAMENTO_AGENDADO'
                 ? ' O acesso continua até a data de expiração.'
                 : subscription.autoRenew
@@ -409,7 +412,8 @@ export function TrocarPlanoPage() {
       <section className="panel stack">
         <h2>Trocar plano</h2>
         <p className="muted">
-          Plano atual: {planLabel(current.plano)}. A troca vale imediatamente e mantém o ciclo até{' '}
+          Plano atual: {planLabel(current.plano)}. Upgrade cobra a diferença proporcional dos dias
+          restantes; downgrade gera crédito na próxima renovação. O ciclo segue até{' '}
           {current.dataExpiracao}.
         </p>
         <div className="plans">

@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-outbox-retry.yaml
   - include:
       file: db/changelog/changes/003-user-password.yaml
+  - include:
+      file: db/changelog/changes/004-renewal-credit.yaml

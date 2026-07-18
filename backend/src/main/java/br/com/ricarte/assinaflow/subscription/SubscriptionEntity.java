@@ -38,6 +38,9 @@ public class SubscriptionEntity {
     @Column(name = "renewal_failures", nullable = false)
     private int renewalFailures = 0;
 
+    @Column(name = "renewal_credit_cents", nullable = false)
+    private int renewalCreditCents = 0;
+
     @Column(name = "next_renewal_attempt_at", columnDefinition = "timestamp with time zone")
     private Instant nextRenewalAttemptAt;
 
@@ -104,6 +107,10 @@ public class SubscriptionEntity {
         return renewalFailures;
     }
 
+    public int getRenewalCreditCents() {
+        return renewalCreditCents;
+    }
+
     public Instant getNextRenewalAttemptAt() {
         return nextRenewalAttemptAt;
     }
@@ -162,6 +169,10 @@ public class SubscriptionEntity {
 
     public void setRenewalFailures(int renewalFailures) {
         this.renewalFailures = renewalFailures;
+    }
+
+    public void setRenewalCreditCents(int renewalCreditCents) {
+        this.renewalCreditCents = renewalCreditCents;
     }
 
     public void setNextRenewalAttemptAt(Instant nextRenewalAttemptAt) {

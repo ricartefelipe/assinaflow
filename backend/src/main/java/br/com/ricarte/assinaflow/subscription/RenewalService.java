@@ -28,6 +28,7 @@ public class RenewalService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionRenewalAttemptRepository attemptRepository;
     private final PaymentService paymentService;
+    private final ProrationService prorationService;
     private final TimeProvider timeProvider;
     private final SubscriptionCache subscriptionCache;
     private final BillingMetrics billingMetrics;
@@ -43,6 +44,7 @@ public class RenewalService {
             SubscriptionRepository subscriptionRepository,
             SubscriptionRenewalAttemptRepository attemptRepository,
             PaymentService paymentService,
+            ProrationService prorationService,
             TimeProvider timeProvider,
             SubscriptionCache subscriptionCache,
             BillingMetrics billingMetrics,
@@ -54,6 +56,7 @@ public class RenewalService {
         this.subscriptionRepository = subscriptionRepository;
         this.attemptRepository = attemptRepository;
         this.paymentService = paymentService;
+        this.prorationService = prorationService;
         this.timeProvider = timeProvider;
         this.subscriptionCache = subscriptionCache;
         this.billingMetrics = billingMetrics;
@@ -139,7 +142,7 @@ public class RenewalService {
         }
 
         int attemptNumber = s.getRenewalFailures() + 1;
-        int amountCents = s.getPlan().getPriceCents();
+        int amountCents = prorationService.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents());
         LocalDate cycleExpiration = s.getExpirationDate();
 
         String idempotencyKey = s.getId() + "|" + cycleExpiration + "|" + attemptNumber;
@@ -205,7 +208,7 @@ public class RenewalService {
         }
 
         int attemptNumber = s.getRenewalFailures() + 1;
-        int amountCents = s.getPlan().getPriceCents();
+        int amountCents = prorationService.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents());
         LocalDate cycleExpiration = s.getExpirationDate();
 
         PaymentResult payment = paymentService.charge(s.getUserId(), amountCents);
@@ -225,6 +228,7 @@ public class RenewalService {
             s.setStartDate(cycleExpiration);
             s.setExpirationDate(cycleExpiration.plusMonths(1));
             s.setRenewalFailures(0);
+            s.setRenewalCreditCents(0);
             s.setNextRenewalAttemptAt(null);
             s.setStatus(SubscriptionStatus.ATIVA);
             s.setRenewalInFlightUntil(null);

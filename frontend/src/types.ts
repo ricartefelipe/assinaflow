@@ -27,6 +27,7 @@ export interface Subscription {
   status: SubscriptionStatus
   autoRenew: boolean
   renewalFailures: number
+  creditoRenovacaoCentavos?: number
   nextRenewalAttemptAt: string | null
 }
 

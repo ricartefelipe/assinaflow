@@ -74,6 +74,7 @@ class RenewalServiceOutboxReclaimTest {
                 subscriptionRepository,
                 attemptRepository,
                 paymentService,
+                new ProrationService(),
                 timeProvider,
                 subscriptionCache,
                 billingMetrics,
