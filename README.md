@@ -8,6 +8,7 @@ Base package: `br.com.ricarte.assinaflow`
 ## Ferramentas (build e testes)
 - **Java:** 21 (Temurin ou equivalente recomendado)
 - **Maven:** 3.9+, instalacao no sistema; nao há `mvnw` neste repositorio (`mvn test` deve resolver o projeto em `backend/`)
+- **Node.js:** 20+ para o portal em `frontend/` (`npm install` / `npm run dev`)
 - **Docker / Docker Compose:** para subir a stack (`docker compose up`) e para os testes de integracao (`Testcontainers`); o comando `compose` deve ser o mesmo que o Compose V2 distribuido pelo Docker CLI
 
 ---
@@ -76,20 +77,43 @@ Swagger UI:
 OpenAPI JSON:
 - `/v3/api-docs`
 
+### Auth
+- POST `/api/v1/auth/register`
+- POST `/api/v1/auth/login`
+- GET `/api/v1/auth/me` (JWT)
+
 ### Usuarios
 - POST `/api/v1/users`
-- GET `/api/v1/users/{userId}`
-- PUT `/api/v1/users/{userId}/payment-profile`
+- GET `/api/v1/users/{userId}` (JWT + ownership)
+- PUT `/api/v1/users/{userId}/payment-profile` (JWT + ownership)
 
 ### Planos
 - GET `/api/v1/plans`
 
 ### Assinaturas
-- POST `/api/v1/users/{userId}/subscriptions`
-- GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa)
-- GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}`
-- GET `/api/v1/users/{userId}/subscriptions`
-- POST `/api/v1/users/{userId}/subscriptions/cancel`
+- POST `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
+- GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa; JWT + ownership)
+- GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
+- GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
+- POST `/api/v1/users/{userId}/subscriptions/cancel` (JWT + ownership)
+
+---
+
+## Portal do assinante
+Em um terminal, com a API em `http://localhost:8080`:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar → conta (status e cancelamento).
+
+Variaveis uteis da API:
+- `JWT_SECRET` (minimo 32 caracteres)
+- `APP_CORS_ORIGINS` (padrao inclui `http://localhost:5173`)
+- `APP_SECURITY_ENABLED` (`false` desliga autenticacao; util em testes)
 
 ---
 

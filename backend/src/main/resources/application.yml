@@ -62,3 +62,10 @@ app:
   cancellation:
     scheduler:
       cron: ${APP_CANCELLATION_CRON:0 10 0 * * *}
+  security:
+    enabled: ${APP_SECURITY_ENABLED:true}
+    jwt:
+      secret: ${JWT_SECRET:local-dev-only-change-me-assinaflow-secret-key-32b}
+      expiration: ${JWT_EXPIRATION:PT8H}
+    cors:
+      allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

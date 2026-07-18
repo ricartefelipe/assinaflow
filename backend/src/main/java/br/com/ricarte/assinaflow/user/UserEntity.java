@@ -21,6 +21,9 @@ public class UserEntity {
     @Column(name = "nome", nullable = false, length = 120)
     private String nome;
 
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "timestamp with time zone")
     private Instant createdAt;
 
@@ -51,6 +54,10 @@ public class UserEntity {
         return nome;
     }
 
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -69,5 +76,9 @@ public class UserEntity {
 
     public void setNome(String nome) {
         this.nome = nome;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 }

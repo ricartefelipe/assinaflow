@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @TestPropertySource(properties = {
         "app.scheduler.enabled=false",
         "app.payments.async.enabled=false",
+        "app.security.enabled=false",
         "spring.cache.type=simple"
 })
 public abstract class IntegrationTestBase {
