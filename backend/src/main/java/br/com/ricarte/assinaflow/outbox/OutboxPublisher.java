@@ -1,11 +1,14 @@
 package br.com.ricarte.assinaflow.outbox;
 
 import br.com.ricarte.assinaflow.metrics.BillingMetrics;
+import br.com.ricarte.assinaflow.notification.NotificationMessage;
+import br.com.ricarte.assinaflow.notification.NotificationSender;
 import br.com.ricarte.assinaflow.subscription.PaymentChargeRequested;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,7 +25,8 @@ public class OutboxPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
 
     private final OutboxRepository outboxRepository;
-    private final RabbitTemplate rabbitTemplate;
+    private final ObjectProvider<RabbitTemplate> rabbitTemplate;
+    private final NotificationSender notificationSender;
     private final ObjectMapper objectMapper;
     private final BillingMetrics billingMetrics;
 
@@ -35,7 +39,8 @@ public class OutboxPublisher {
 
     public OutboxPublisher(
             OutboxRepository outboxRepository,
-            RabbitTemplate rabbitTemplate,
+            ObjectProvider<RabbitTemplate> rabbitTemplate,
+            NotificationSender notificationSender,
             ObjectMapper objectMapper,
             BillingMetrics billingMetrics,
             PlatformTransactionManager transactionManager,
@@ -45,6 +50,7 @@ public class OutboxPublisher {
     ) {
         this.outboxRepository = outboxRepository;
         this.rabbitTemplate = rabbitTemplate;
+        this.notificationSender = notificationSender;
         this.objectMapper = objectMapper;
         this.billingMetrics = billingMetrics;
         this.exchange = exchange;
@@ -55,17 +61,6 @@ public class OutboxPublisher {
         this.requiresNewTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /**
-     * Publishes PENDING events that are ready (next_attempt_at <= now).
-     *
-     * Delivery model:
-     * - at-least-once publication to the broker
-     * - consumer MUST be idempotent
-     *
-     * Failure handling:
-     * - backoff is deterministic
-     * - after max attempts, the record is marked DEAD
-     */
     public int publishPending(int max) {
         return requiresNewTx.execute(status -> {
             Instant now = Instant.now();
@@ -86,8 +81,7 @@ public class OutboxPublisher {
         int attempt = e.getPublishAttempts() + 1;
 
         try {
-            PaymentChargeRequested msg = objectMapper.readValue(e.getPayload(), PaymentChargeRequested.class);
-            rabbitTemplate.convertAndSend(exchange, routingKey, msg);
+            dispatch(e);
 
             e.setStatus(OutboxStatus.SENT);
             e.setSentAt(now);
@@ -125,8 +119,28 @@ public class OutboxPublisher {
         }
     }
 
+    private void dispatch(OutboxEventEntity e) throws Exception {
+        String type = e.getEventType();
+        if (type != null && type.startsWith("NOTIFICATION_")) {
+            NotificationMessage msg = objectMapper.readValue(e.getPayload(), NotificationMessage.class);
+            notificationSender.send(msg);
+            return;
+        }
+
+        if ("PAYMENT_CHARGE_REQUESTED".equals(type)) {
+            RabbitTemplate template = rabbitTemplate.getIfAvailable();
+            if (template == null) {
+                throw new IllegalStateException("RabbitTemplate indisponivel para PAYMENT_CHARGE_REQUESTED");
+            }
+            PaymentChargeRequested msg = objectMapper.readValue(e.getPayload(), PaymentChargeRequested.class);
+            template.convertAndSend(exchange, routingKey, msg);
+            return;
+        }
+
+        throw new IllegalArgumentException("eventType nao suportado: " + type);
+    }
+
     private static Duration publishBackoff(int attempt) {
-        // Deterministic backoff (avoid jitter to keep behavior predictable).
         return switch (attempt) {
             case 1 -> Duration.ofSeconds(1);
             case 2 -> Duration.ofSeconds(5);

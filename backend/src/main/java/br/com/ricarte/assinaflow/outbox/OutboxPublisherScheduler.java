@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "app.payments.async.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxPublisherScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisherScheduler.class);

@@ -2,6 +2,7 @@ package br.com.ricarte.assinaflow.subscription;
 
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
 import br.com.ricarte.assinaflow.metrics.BillingMetrics;
+import br.com.ricarte.assinaflow.notification.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Map;
 
 @Component
 @ConditionalOnProperty(name = "app.payments.async.enabled", havingValue = "true")
@@ -25,6 +27,7 @@ public class PaymentChargeConsumer {
     private final TimeProvider timeProvider;
     private final SubscriptionCache subscriptionCache;
     private final BillingMetrics billingMetrics;
+    private final NotificationService notificationService;
 
     public PaymentChargeConsumer(
             SubscriptionRepository subscriptionRepository,
@@ -32,7 +35,8 @@ public class PaymentChargeConsumer {
             PaymentService paymentService,
             TimeProvider timeProvider,
             SubscriptionCache subscriptionCache,
-            BillingMetrics billingMetrics
+            BillingMetrics billingMetrics,
+            NotificationService notificationService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.attemptRepository = attemptRepository;
@@ -40,6 +44,7 @@ public class PaymentChargeConsumer {
         this.timeProvider = timeProvider;
         this.subscriptionCache = subscriptionCache;
         this.billingMetrics = billingMetrics;
+        this.notificationService = notificationService;
     }
 
     @RabbitListener(queues = "${app.rabbitmq.payments.queue:payments.charge}")
@@ -104,6 +109,16 @@ public class PaymentChargeConsumer {
             subscriptionRepository.save(s);
             subscriptionCache.evictActive(s.getUserId());
 
+            notificationService.enqueue(
+                    NotificationService.RENEWAL_SUCCEEDED,
+                    s.getUserId(),
+                    s.getId(),
+                    "Renovacao concluida",
+                    "Sua assinatura foi renovada ate " + s.getExpirationDate() + ".",
+                    Map.of("expiration", s.getExpirationDate().toString()),
+                    "notification|renewal-ok|" + s.getId() + "|" + msg.cycleExpirationDate()
+            );
+
             log.info("payment approved -> renewed subscriptionId={} userId={} newExpiration={}", s.getId(), s.getUserId(), s.getExpirationDate());
             return;
         }
@@ -127,6 +142,16 @@ public class PaymentChargeConsumer {
             subscriptionCache.evictActive(s.getUserId());
             billingMetrics.subscriptionSuspended("async");
 
+            notificationService.enqueue(
+                    NotificationService.SUBSCRIPTION_SUSPENDED,
+                    s.getUserId(),
+                    s.getId(),
+                    "Assinatura suspensa",
+                    "Sua assinatura foi suspensa apos falhas de cobranca.",
+                    Map.of("attempt", String.valueOf(attemptNumber)),
+                    "notification|suspended|" + s.getId() + "|" + msg.cycleExpirationDate()
+            );
+
             log.warn("payment declined 3x -> suspended subscriptionId={} userId={}", s.getId(), s.getUserId());
             return;
         }
@@ -136,6 +161,16 @@ public class PaymentChargeConsumer {
         s.setRenewalInFlightUntil(null);
         subscriptionRepository.save(s);
         subscriptionCache.evictActive(s.getUserId());
+
+        notificationService.enqueue(
+                NotificationService.RENEWAL_FAILED,
+                s.getUserId(),
+                s.getId(),
+                "Falha na renovacao",
+                "Nao foi possivel renovar sua assinatura. Tentativa " + attemptNumber + ".",
+                Map.of("attempt", String.valueOf(attemptNumber)),
+                "notification|renewal-fail|" + s.getId() + "|" + msg.cycleExpirationDate() + "|" + attemptNumber
+        );
 
         log.info("payment declined subscriptionId={} userId={} attempt={} nextAttemptAt={}",
                 s.getId(), s.getUserId(), attemptNumber, s.getNextRenewalAttemptAt());

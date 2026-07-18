@@ -54,6 +54,10 @@ app:
       url: ${APP_PAYMENTS_HTTP_URL:http://localhost:9090/charge}
     async:
       enabled: ${APP_PAYMENTS_ASYNC_ENABLED:false}
+  notifications:
+    sender: ${APP_NOTIFICATIONS_SENDER:logging}
+    smtp:
+      from: ${APP_NOTIFICATIONS_FROM:noreply@assinaflow.local}
   outbox:
     publisher:
       cron: "${APP_OUTBOX_PUBLISHER_CRON:*/2 * * * * *}"

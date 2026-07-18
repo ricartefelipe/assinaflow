@@ -119,6 +119,9 @@ Variaveis uteis da API:
 - `APP_CORS_ORIGINS` (padrao inclui `http://localhost:5173`)
 - `APP_PAYMENTS_GATEWAY` (`simulated` padrao, ou `http`)
 - `APP_PAYMENTS_HTTP_URL` (URL do stub quando gateway=`http`)
+- `APP_NOTIFICATIONS_SENDER` (`logging` padrao, ou `smtp`)
+- `APP_NOTIFICATIONS_FROM` (remetente quando sender=`smtp`)
+- `spring.mail.host` / `spring.mail.port` (SMTP)
 
 A contratacao cobra o preco do plano via `PaymentGateway` antes de ativar. Com `simulated`, o comportamento segue o payment-profile do usuario (`ALWAYS_APPROVE` / `ALWAYS_DECLINE` / `FAIL_NEXT_N`).
 - `APP_SECURITY_ENABLED` (`false` desliga autenticacao; util em testes)

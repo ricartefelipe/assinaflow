@@ -4,6 +4,7 @@ import br.com.ricarte.assinaflow.common.exception.BadRequestException;
 import br.com.ricarte.assinaflow.common.exception.ConflictException;
 import br.com.ricarte.assinaflow.common.exception.NotFoundException;
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
+import br.com.ricarte.assinaflow.notification.NotificationService;
 import br.com.ricarte.assinaflow.subscription.dto.ChangePlanRequest;
 import br.com.ricarte.assinaflow.subscription.dto.CreateSubscriptionRequest;
 import br.com.ricarte.assinaflow.subscription.dto.SubscriptionResponse;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,6 +32,7 @@ public class SubscriptionService {
     private final SubscriptionCache subscriptionCache;
     private final PaymentService paymentService;
     private final ProrationService prorationService;
+    private final NotificationService notificationService;
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
@@ -37,7 +40,8 @@ public class SubscriptionService {
             TimeProvider timeProvider,
             SubscriptionCache subscriptionCache,
             PaymentService paymentService,
-            ProrationService prorationService
+            ProrationService prorationService,
+            NotificationService notificationService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
@@ -45,6 +49,7 @@ public class SubscriptionService {
         this.subscriptionCache = subscriptionCache;
         this.paymentService = paymentService;
         this.prorationService = prorationService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -94,6 +99,16 @@ public class SubscriptionService {
         } finally {
             subscriptionCache.evictActive(userId);
         }
+
+        notificationService.enqueue(
+                NotificationService.SUBSCRIPTION_CREATED,
+                userId,
+                s.getId(),
+                "Assinatura ativada",
+                "Sua assinatura " + s.getPlan() + " foi ativada.",
+                Map.of("plano", s.getPlan().name()),
+                "notification|created|" + s.getId()
+        );
 
         return toResponse(s);
     }
@@ -238,6 +253,17 @@ public class SubscriptionService {
         s.setPlan(req.getPlano());
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);
+
+        notificationService.enqueue(
+                NotificationService.PLAN_CHANGED,
+                userId,
+                s.getId(),
+                "Plano alterado",
+                "Sua assinatura agora e " + s.getPlan() + ".",
+                Map.of("plano", s.getPlan().name(), "deltaCentavos", String.valueOf(delta)),
+                "notification|plan-changed|" + s.getId() + "|" + s.getPlan() + "|" + today
+        );
+
         return toResponse(s);
     }
 

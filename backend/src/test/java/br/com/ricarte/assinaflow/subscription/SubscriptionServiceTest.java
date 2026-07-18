@@ -48,6 +48,9 @@ class SubscriptionServiceTest {
     @Spy
     ProrationService prorationService = new ProrationService();
 
+    @Mock
+    br.com.ricarte.assinaflow.notification.NotificationService notificationService;
+
     @InjectMocks
     SubscriptionService subscriptionService;
 

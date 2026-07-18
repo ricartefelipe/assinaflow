@@ -2,6 +2,7 @@ package br.com.ricarte.assinaflow.subscription;
 
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
 import br.com.ricarte.assinaflow.metrics.BillingMetrics;
+import br.com.ricarte.assinaflow.notification.NotificationService;
 import br.com.ricarte.assinaflow.outbox.OutboxEventEntity;
 import br.com.ricarte.assinaflow.outbox.OutboxRepository;
 import br.com.ricarte.assinaflow.outbox.OutboxStatus;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RenewalService {
@@ -32,6 +34,7 @@ public class RenewalService {
     private final TimeProvider timeProvider;
     private final SubscriptionCache subscriptionCache;
     private final BillingMetrics billingMetrics;
+    private final NotificationService notificationService;
 
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
@@ -48,6 +51,7 @@ public class RenewalService {
             TimeProvider timeProvider,
             SubscriptionCache subscriptionCache,
             BillingMetrics billingMetrics,
+            NotificationService notificationService,
             OutboxRepository outboxRepository,
             ObjectMapper objectMapper,
             PlatformTransactionManager transactionManager,
@@ -60,6 +64,7 @@ public class RenewalService {
         this.timeProvider = timeProvider;
         this.subscriptionCache = subscriptionCache;
         this.billingMetrics = billingMetrics;
+        this.notificationService = notificationService;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
         this.asyncEnabled = asyncEnabled;
@@ -236,6 +241,16 @@ public class RenewalService {
             subscriptionRepository.save(s);
             subscriptionCache.evictActive(s.getUserId());
 
+            notificationService.enqueue(
+                    NotificationService.RENEWAL_SUCCEEDED,
+                    s.getUserId(),
+                    s.getId(),
+                    "Renovacao concluida",
+                    "Sua assinatura foi renovada ate " + s.getExpirationDate() + ".",
+                    Map.of("expiration", s.getExpirationDate().toString()),
+                    "notification|renewal-ok|" + s.getId() + "|" + cycleExpiration
+            );
+
             log.info("renewal success subscriptionId={} userId={} newExpiration={}", s.getId(), s.getUserId(), s.getExpirationDate());
             return;
         }
@@ -258,6 +273,16 @@ public class RenewalService {
             subscriptionCache.evictActive(s.getUserId());
             billingMetrics.subscriptionSuspended("sync");
 
+            notificationService.enqueue(
+                    NotificationService.SUBSCRIPTION_SUSPENDED,
+                    s.getUserId(),
+                    s.getId(),
+                    "Assinatura suspensa",
+                    "Sua assinatura foi suspensa apos falhas de cobranca.",
+                    Map.of("attempt", String.valueOf(attemptNumber)),
+                    "notification|suspended|" + s.getId() + "|" + cycleExpiration
+            );
+
             log.warn("renewal failed 3x -> suspended subscriptionId={} userId={}", s.getId(), s.getUserId());
             return;
         }
@@ -267,6 +292,16 @@ public class RenewalService {
         s.setRenewalInFlightUntil(null);
         subscriptionRepository.save(s);
         subscriptionCache.evictActive(s.getUserId());
+
+        notificationService.enqueue(
+                NotificationService.RENEWAL_FAILED,
+                s.getUserId(),
+                s.getId(),
+                "Falha na renovacao",
+                "Nao foi possivel renovar sua assinatura. Tentativa " + attemptNumber + ".",
+                Map.of("attempt", String.valueOf(attemptNumber)),
+                "notification|renewal-fail|" + s.getId() + "|" + cycleExpiration + "|" + attemptNumber
+        );
 
         log.info("renewal failed subscriptionId={} userId={} attempt={} nextAttemptAt={}",
                 s.getId(), s.getUserId(), attemptNumber, s.getNextRenewalAttemptAt());
