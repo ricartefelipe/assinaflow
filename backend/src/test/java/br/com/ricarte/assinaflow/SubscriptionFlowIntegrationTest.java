@@ -192,6 +192,29 @@ public class SubscriptionFlowIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void shouldRenewWhenExpirationDateIsOverdue() throws Exception {
+        UUID userId = createUser("helen@example.com", "Helen", "ALWAYS_APPROVE", 0);
+
+        String sub = """
+                {"plano":"PREMIUM","dataInicio":"2025-03-10"}
+                """;
+
+        mockMvc.perform(post("/api/v1/users/{userId}/subscriptions", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sub))
+                .andExpect(status().isCreated());
+
+        timeProvider.setNow(Instant.parse("2025-04-12T08:00:00Z"));
+        renewalService.processDueRenewals(10);
+
+        SubscriptionEntity s = subscriptionRepository.findByUserIdOrderByCreatedAtDesc(userId).get(0);
+        assertThat(s.getStatus()).isEqualTo(SubscriptionStatus.ATIVA);
+        assertThat(s.getStartDate()).isEqualTo(java.time.LocalDate.parse("2025-04-10"));
+        assertThat(s.getExpirationDate()).isEqualTo(java.time.LocalDate.parse("2025-05-10"));
+        assertThat(s.getRenewalFailures()).isEqualTo(0);
+    }
+
+    @Test
     void shouldSuspendAfterThreeFailedRenewalAttempts() throws Exception {
         UUID userId = createUser("erin@example.com", "Erin", "ALWAYS_DECLINE", 0);
 

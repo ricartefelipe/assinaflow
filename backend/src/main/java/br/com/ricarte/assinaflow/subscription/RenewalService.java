@@ -169,18 +169,34 @@ public class RenewalService {
             outboxRepository.save(e);
             billingMetrics.outboxEnqueued(e.getEventType());
 
-            // Mark in-flight to prevent repeated enqueueing while message is being processed.
             s.setRenewalInFlightUntil(now.plus(Duration.ofMinutes(10)));
             subscriptionRepository.save(s);
 
             log.info("enqueued payment charge subscriptionId={} userId={} attempt={}", s.getId(), s.getUserId(), attemptNumber);
         } catch (DataIntegrityViolationException dup) {
-            // Idempotency key already exists: another instance enqueued the same attempt.
+            reclaimDeadOutboxIfNeeded(idempotencyKey, now);
             s.setRenewalInFlightUntil(now.plus(Duration.ofMinutes(10)));
             subscriptionRepository.save(s);
         } catch (Exception ex) {
             log.warn("failed to enqueue outbox subscriptionId={} error={}", s.getId(), ex.toString());
         }
+    }
+
+    private void reclaimDeadOutboxIfNeeded(String idempotencyKey, Instant now) {
+        outboxRepository.findByIdempotencyKey(idempotencyKey).ifPresent(existing -> {
+            if (existing.getStatus() != OutboxStatus.DEAD) {
+                return;
+            }
+            existing.setStatus(OutboxStatus.PENDING);
+            existing.setPublishAttempts(0);
+            existing.setNextAttemptAt(now);
+            existing.setDeadAt(null);
+            existing.setLastError(null);
+            existing.setSentAt(null);
+            outboxRepository.save(existing);
+            billingMetrics.outboxEnqueued(existing.getEventType());
+            log.warn("reclaimed DEAD outbox eventId={} idempotencyKey={}", existing.getId(), idempotencyKey);
+        });
     }
 
     private void processLockedSubscriptionDirect(SubscriptionEntity s, Instant now) {

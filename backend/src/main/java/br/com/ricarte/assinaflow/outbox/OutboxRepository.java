@@ -6,11 +6,14 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface OutboxRepository extends JpaRepository<OutboxEventEntity, UUID> {
 
     long countByStatus(OutboxStatus status);
+
+    Optional<OutboxEventEntity> findByIdempotencyKey(String idempotencyKey);
 
     @Query(value = """
             SELECT *

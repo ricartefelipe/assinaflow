@@ -18,7 +18,7 @@ O AssinaFlow implementa:
 - Cadastro de usuarios
 - Criacao de assinatura com no maximo 1 ativa por usuario
 - Cancelamento sem cortar acesso antes do fim do ciclo
-- Renovacao automatica no dia do vencimento em UTC
+- Renovacao automatica no vencimento em UTC (inclui assinaturas atrasadas)
 - Retry deterministico de cobranca ate 3 tentativas, com suspensao na 3a falha
 - Confiabilidade em multi instancia com lock no Postgres e idempotencia no consumidor
 
@@ -51,7 +51,7 @@ Inclui diferenciais opcionais:
     - Renovacao bem sucedida move:
         - dataInicio = dataExpiracao
         - dataExpiracao = dataExpiracao + 1 mes
-3) Cancelamento:
+    - Assinaturas com dataExpiracao <= hoje UTC entram na fila de renovacao (recupera atraso)3) Cancelamento:
     - status vira CANCELAMENTO_AGENDADO
     - autoRenew vira false
     - dataExpiracao nao muda, nao corta acesso
@@ -65,6 +65,7 @@ Inclui diferenciais opcionais:
     - entrega at least once
     - consumidor idempotente por constraint unica no banco
     - outbox publisher reintenta e marca DEAD apos maxAttempts
+    - evento DEAD da mesma tentativa e reenfileirado se a renovacao voltar a disputar a chave
 
 ---
 

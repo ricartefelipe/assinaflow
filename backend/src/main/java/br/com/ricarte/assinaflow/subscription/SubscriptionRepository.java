@@ -32,7 +32,7 @@ public interface SubscriptionRepository extends JpaRepository<SubscriptionEntity
             WHERE status = 'ATIVA'
               AND auto_renew = true
               AND renewal_failures < 3
-              AND expiration_date = :today
+              AND expiration_date <= :today
               AND (next_renewal_attempt_at IS NULL OR next_renewal_attempt_at <= :now)
               AND (renewal_in_flight_until IS NULL OR renewal_in_flight_until <= :now)
             ORDER BY expiration_date ASC, updated_at ASC
