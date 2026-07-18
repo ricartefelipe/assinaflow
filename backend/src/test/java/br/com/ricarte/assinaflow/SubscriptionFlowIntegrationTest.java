@@ -61,6 +61,47 @@ public class SubscriptionFlowIntegrationTest extends IntegrationTestBase {
 
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(body.get("id").asText()).isNotBlank();
+
+        String location = res.getResponse().getHeader("Location");
+        assertThat(location).isEqualTo("/api/v1/users/" + userId + "/subscriptions/" + body.get("id").asText());
+
+        mockMvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(body.get("id").asText()))
+                .andExpect(jsonPath("$.plano").value("PREMIUM"));
+    }
+
+    @Test
+    void activeSubscriptionShouldReturnNoContentWhenMissing() throws Exception {
+        UUID userId = createUser("grace@example.com", "Grace", "ALWAYS_APPROVE", 0);
+
+        mockMvc.perform(get("/api/v1/users/{userId}/subscriptions/active", userId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void historyShouldReturnNotFoundForUnknownUser() throws Exception {
+        mockMvc.perform(get("/api/v1/users/{userId}/subscriptions", UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+    }
+
+    @Test
+    void invalidUserIdShouldReturnBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/users/{userId}", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void plansCatalogShouldListPrices() throws Exception {
+        mockMvc.perform(get("/api/v1/plans"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].plano").value("BASICO"))
+                .andExpect(jsonPath("$[0].precoCentavos").value(1990))
+                .andExpect(jsonPath("$[0].moeda").value("BRL"))
+                .andExpect(jsonPath("$[1].plano").value("PREMIUM"))
+                .andExpect(jsonPath("$[2].plano").value("FAMILIA"));
     }
 
     @Test

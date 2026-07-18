@@ -15,7 +15,15 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("AssinaFlow API")
                         .version("1.0.0")
-                        .description("API de gestao de assinaturas com renovacao automatica e cancelamento no fim do ciclo.")
+                        .description("""
+                                API de gestao de assinaturas com renovacao automatica e cancelamento no fim do ciclo.
+
+                                Estados relevantes:
+                                - ATIVA: assinatura vigente com renovacao conforme autoRenew
+                                - CANCELAMENTO_AGENDADO: acesso permanece ate dataExpiracao; nao renova
+                                - CANCELADA: ciclo encerrado
+                                - SUSPENSA: falha reiterada de cobranca
+                                """)
                         .license(new License().name("Proprietary")));
     }
 }

@@ -81,9 +81,13 @@ OpenAPI JSON:
 - GET `/api/v1/users/{userId}`
 - PUT `/api/v1/users/{userId}/payment-profile`
 
+### Planos
+- GET `/api/v1/plans`
+
 ### Assinaturas
 - POST `/api/v1/users/{userId}/subscriptions`
-- GET `/api/v1/users/{userId}/subscriptions/active`
+- GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa)
+- GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}`
 - GET `/api/v1/users/{userId}/subscriptions`
 - POST `/api/v1/users/{userId}/subscriptions/cancel`
 

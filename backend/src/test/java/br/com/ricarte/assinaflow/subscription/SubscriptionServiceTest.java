@@ -109,4 +109,54 @@ class SubscriptionServiceTest {
         assertThat(resp.getStatus()).isEqualTo(SubscriptionStatus.CANCELAMENTO_AGENDADO);
         assertThat(resp.isAutoRenew()).isFalse();
     }
+
+    @Test
+    void getActiveShouldFailWhenUserDoesNotExist() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsById(userId)).thenReturn(false);
+
+        assertThatThrownBy(() -> subscriptionService.getActive(userId))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Usuario");
+    }
+
+    @Test
+    void getActiveShouldReturnNullWhenUserHasNoActiveSubscription() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusIn(eq(userId), any(EnumSet.class)))
+                .thenReturn(Optional.empty());
+
+        assertThat(subscriptionService.getActive(userId)).isNull();
+    }
+
+    @Test
+    void getByIdShouldFailWhenSubscriptionBelongsToAnotherUser() {
+        UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(subscriptionId);
+        s.setUserId(otherUserId);
+        s.setPlan(Plan.BASICO);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.ATIVA);
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(s));
+
+        assertThatThrownBy(() -> subscriptionService.getById(userId, subscriptionId))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void historyShouldFailWhenUserDoesNotExist() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsById(userId)).thenReturn(false);
+
+        assertThatThrownBy(() -> subscriptionService.history(userId))
+                .isInstanceOf(NotFoundException.class);
+    }
 }

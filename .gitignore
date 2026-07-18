@@ -11,3 +11,6 @@ backend/target/
 
 # Logs
 *.log
+
+# Local brainstorm sessions
+.superpowers/

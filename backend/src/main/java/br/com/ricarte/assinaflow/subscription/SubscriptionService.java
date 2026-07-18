@@ -77,15 +77,28 @@ public class SubscriptionService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(cacheNames = SubscriptionCache.ACTIVE_CACHE, key = "#userId")
+    @Cacheable(cacheNames = SubscriptionCache.ACTIVE_CACHE, key = "#userId", unless = "#result == null")
     public SubscriptionResponse getActive(UUID userId) {
-        SubscriptionEntity s = subscriptionRepository.findFirstByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
-                .orElseThrow(() -> new NotFoundException("SUBSCRIPTION_NOT_FOUND", "Assinatura ativa nao encontrada."));
+        requireUser(userId);
+        return subscriptionRepository.findFirstByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
+                .map(SubscriptionService::toResponse)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public SubscriptionResponse getById(UUID userId, UUID subscriptionId) {
+        requireUser(userId);
+        SubscriptionEntity s = subscriptionRepository.findById(subscriptionId)
+                .orElseThrow(() -> new NotFoundException("SUBSCRIPTION_NOT_FOUND", "Assinatura nao encontrada."));
+        if (!userId.equals(s.getUserId())) {
+            throw new NotFoundException("SUBSCRIPTION_NOT_FOUND", "Assinatura nao encontrada.");
+        }
         return toResponse(s);
     }
 
     @Transactional(readOnly = true)
     public List<SubscriptionResponse> history(UUID userId) {
+        requireUser(userId);
         return subscriptionRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(SubscriptionService::toResponse)
@@ -108,6 +121,12 @@ public class SubscriptionService {
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);
         return toResponse(s);
+    }
+
+    private void requireUser(UUID userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new NotFoundException("USER_NOT_FOUND", "Usuario nao encontrado.");
+        }
     }
 
     static SubscriptionResponse toResponse(SubscriptionEntity s) {
