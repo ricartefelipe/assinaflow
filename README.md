@@ -112,11 +112,15 @@ npm install
 npm run dev
 ```
 
-Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar → conta (status e cancelamento).
+Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar (cobra via gateway) → conta (status e cancelamento).
 
 Variaveis uteis da API:
 - `JWT_SECRET` (minimo 32 caracteres)
 - `APP_CORS_ORIGINS` (padrao inclui `http://localhost:5173`)
+- `APP_PAYMENTS_GATEWAY` (`simulated` padrao, ou `http`)
+- `APP_PAYMENTS_HTTP_URL` (URL do stub quando gateway=`http`)
+
+A contratacao cobra o preco do plano via `PaymentGateway` antes de ativar. Com `simulated`, o comportamento segue o payment-profile do usuario (`ALWAYS_APPROVE` / `ALWAYS_DECLINE` / `FAIL_NEXT_N`).
 - `APP_SECURITY_ENABLED` (`false` desliga autenticacao; util em testes)
 
 ---

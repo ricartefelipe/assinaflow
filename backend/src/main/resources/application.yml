@@ -49,6 +49,9 @@ app:
   scheduler:
     enabled: ${APP_SCHEDULER_ENABLED:true}
   payments:
+    gateway: ${APP_PAYMENTS_GATEWAY:simulated}
+    http:
+      url: ${APP_PAYMENTS_HTTP_URL:http://localhost:9090/charge}
     async:
       enabled: ${APP_PAYMENTS_ASYNC_ENABLED:false}
   outbox:

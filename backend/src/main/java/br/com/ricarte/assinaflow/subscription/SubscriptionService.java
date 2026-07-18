@@ -28,17 +28,20 @@ public class SubscriptionService {
     private final UserRepository userRepository;
     private final TimeProvider timeProvider;
     private final SubscriptionCache subscriptionCache;
+    private final PaymentService paymentService;
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
             TimeProvider timeProvider,
-            SubscriptionCache subscriptionCache
+            SubscriptionCache subscriptionCache,
+            PaymentService paymentService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.timeProvider = timeProvider;
         this.subscriptionCache = subscriptionCache;
+        this.paymentService = paymentService;
     }
 
     @Transactional
@@ -54,6 +57,20 @@ public class SubscriptionService {
 
         LocalDate start = req.getDataInicio() != null ? req.getDataInicio() : timeProvider.todayUtc();
         LocalDate expiration = start.plusMonths(1);
+        int amountCents = req.getPlano().getPriceCents();
+
+        PaymentResult payment = paymentService.charge(
+                userId,
+                amountCents,
+                "subscribe|" + userId + "|" + req.getPlano() + "|" + start,
+                "Assinatura " + req.getPlano()
+        );
+        if (!payment.isApproved()) {
+            throw new BadRequestException(
+                    payment.errorCode() != null ? payment.errorCode() : "PAYMENT_DECLINED",
+                    payment.errorMessage() != null ? payment.errorMessage() : "Pagamento recusado."
+            );
+        }
 
         SubscriptionEntity s = new SubscriptionEntity();
         s.setUserId(userId);

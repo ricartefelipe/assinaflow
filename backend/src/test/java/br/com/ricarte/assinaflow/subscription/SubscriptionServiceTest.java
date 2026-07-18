@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -40,6 +41,9 @@ class SubscriptionServiceTest {
     @Mock
     SubscriptionCache subscriptionCache;
 
+    @Mock
+    PaymentService paymentService;
+
     @InjectMocks
     SubscriptionService subscriptionService;
 
@@ -53,6 +57,7 @@ class SubscriptionServiceTest {
 
         assertThatThrownBy(() -> subscriptionService.create(userId, req))
                 .isInstanceOf(NotFoundException.class);
+        verify(paymentService, never()).charge(any(), anyInt(), any(), any());
     }
 
     @Test
@@ -67,6 +72,47 @@ class SubscriptionServiceTest {
         assertThatThrownBy(() -> subscriptionService.create(userId, req))
                 .isInstanceOf(ConflictException.class);
 
+        verify(subscriptionRepository, never()).save(any());
+        verify(paymentService, never()).charge(any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void createShouldChargeAndActivate() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.existsByUserIdAndStatusIn(eq(userId), any())).thenReturn(false);
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-03-10"));
+        when(paymentService.charge(eq(userId), eq(Plan.PREMIUM.getPriceCents()), any(), any()))
+                .thenReturn(PaymentResult.approved());
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> {
+            SubscriptionEntity s = inv.getArgument(0);
+            s.setId(UUID.randomUUID());
+            return s;
+        });
+
+        CreateSubscriptionRequest req = new CreateSubscriptionRequest();
+        req.setPlano(Plan.PREMIUM);
+
+        var resp = subscriptionService.create(userId, req);
+        assertThat(resp.getPlano()).isEqualTo(Plan.PREMIUM);
+        assertThat(resp.getStatus()).isEqualTo(SubscriptionStatus.ATIVA);
+        verify(paymentService).charge(eq(userId), eq(3990), any(), any());
+    }
+
+    @Test
+    void createShouldRejectWhenPaymentDeclined() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.existsByUserIdAndStatusIn(eq(userId), any())).thenReturn(false);
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-03-10"));
+        when(paymentService.charge(eq(userId), eq(Plan.BASICO.getPriceCents()), any(), any()))
+                .thenReturn(PaymentResult.declined("PAYMENT_DECLINED", "recusado"));
+
+        CreateSubscriptionRequest req = new CreateSubscriptionRequest();
+        req.setPlano(Plan.BASICO);
+
+        assertThatThrownBy(() -> subscriptionService.create(userId, req))
+                .isInstanceOf(BadRequestException.class);
         verify(subscriptionRepository, never()).save(any());
     }
 
