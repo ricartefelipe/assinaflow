@@ -81,6 +81,8 @@ public class SubscriptionService {
     public SubscriptionResponse getActive(UUID userId) {
         requireUser(userId);
         return subscriptionRepository.findFirstByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
+                .or(() -> subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                        userId, SubscriptionStatus.SUSPENSA))
                 .map(SubscriptionService::toResponse)
                 .orElse(null);
     }
@@ -117,6 +119,58 @@ public class SubscriptionService {
         s.setStatus(SubscriptionStatus.CANCELAMENTO_AGENDADO);
         s.setAutoRenew(false);
         s.setCancelRequestedAt(timeProvider.now());
+
+        s = subscriptionRepository.save(s);
+        subscriptionCache.evictActive(userId);
+        return toResponse(s);
+    }
+
+    @Transactional
+    public SubscriptionResponse resume(UUID userId) {
+        requireUser(userId);
+        SubscriptionEntity s = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByUpdatedAtDesc(userId, SubscriptionStatus.CANCELAMENTO_AGENDADO)
+                .orElseThrow(() -> new NotFoundException(
+                        "SUBSCRIPTION_NOT_FOUND",
+                        "Nao ha cancelamento agendado para retomar."));
+
+        s.setStatus(SubscriptionStatus.ATIVA);
+        s.setAutoRenew(true);
+        s.setCancelRequestedAt(null);
+
+        s = subscriptionRepository.save(s);
+        subscriptionCache.evictActive(userId);
+        return toResponse(s);
+    }
+
+    @Transactional
+    public SubscriptionResponse reactivate(UUID userId) {
+        requireUser(userId);
+
+        if (subscriptionRepository.existsByUserIdAndStatusIn(userId, ACTIVE_STATUSES)) {
+            throw new ConflictException(
+                    "SUBSCRIPTION_ALREADY_ACTIVE",
+                    "Usuario ja possui uma assinatura ativa (ou cancelamento agendado).");
+        }
+
+        SubscriptionEntity s = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByUpdatedAtDesc(userId, SubscriptionStatus.SUSPENSA)
+                .orElseThrow(() -> new NotFoundException(
+                        "SUBSCRIPTION_NOT_FOUND",
+                        "Nao ha assinatura suspensa para reativar."));
+
+        LocalDate today = timeProvider.todayUtc();
+        if (!s.getExpirationDate().isAfter(today)) {
+            s.setStartDate(today);
+            s.setExpirationDate(today.plusMonths(1));
+        }
+
+        s.setStatus(SubscriptionStatus.ATIVA);
+        s.setAutoRenew(true);
+        s.setRenewalFailures(0);
+        s.setNextRenewalAttemptAt(null);
+        s.setRenewalInFlightUntil(null);
+        s.setSuspendedAt(null);
 
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);

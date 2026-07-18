@@ -42,7 +42,7 @@ public class SubscriptionController {
     @GetMapping("/active")
     @Operation(
             summary = "Consulta assinatura ativa",
-            description = "Inclui ATIVA e CANCELAMENTO_AGENDADO. Em CANCELAMENTO_AGENDADO o acesso permanece ate dataExpiracao."
+            description = "Inclui ATIVA, CANCELAMENTO_AGENDADO e, se nao houver essas, a SUSPENSA mais recente."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Assinatura encontrada"),
@@ -88,5 +88,32 @@ public class SubscriptionController {
     })
     public SubscriptionResponse cancel(@PathVariable UUID userId) {
         return subscriptionService.cancel(userId);
+    }
+
+    @PostMapping("/resume")
+    @Operation(
+            summary = "Retoma assinatura com cancelamento agendado",
+            description = "Volta para ATIVA e religa autoRenew."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Assinatura retomada"),
+            @ApiResponse(responseCode = "404", description = "Cancelamento agendado nao encontrado")
+    })
+    public SubscriptionResponse resume(@PathVariable UUID userId) {
+        return subscriptionService.resume(userId);
+    }
+
+    @PostMapping("/reactivate")
+    @Operation(
+            summary = "Reativa assinatura suspensa",
+            description = "Limpa falhas de renovacao e reabre o ciclo se o vencimento ja passou."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Assinatura reativada"),
+            @ApiResponse(responseCode = "404", description = "Assinatura suspensa nao encontrada"),
+            @ApiResponse(responseCode = "409", description = "Ja existe assinatura ativa")
+    })
+    public SubscriptionResponse reactivate(@PathVariable UUID userId) {
+        return subscriptionService.reactivate(userId);
     }
 }

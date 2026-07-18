@@ -97,6 +97,8 @@ OpenAPI JSON:
 - GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
 - POST `/api/v1/users/{userId}/subscriptions/cancel` (JWT + ownership)
+- POST `/api/v1/users/{userId}/subscriptions/resume` (JWT + ownership)
+- POST `/api/v1/users/{userId}/subscriptions/reactivate` (JWT + ownership)
 
 ---
 

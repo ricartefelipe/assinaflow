@@ -81,4 +81,16 @@ export const api = {
       method: 'POST',
     }, true) as Promise<Subscription>
   },
+
+  resumeSubscription(userId: string): Promise<Subscription> {
+    return request<Subscription>(`/api/v1/users/${userId}/subscriptions/resume`, {
+      method: 'POST',
+    }, true) as Promise<Subscription>
+  },
+
+  reactivateSubscription(userId: string): Promise<Subscription> {
+    return request<Subscription>(`/api/v1/users/${userId}/subscriptions/reactivate`, {
+      method: 'POST',
+    }, true) as Promise<Subscription>
+  },
 }

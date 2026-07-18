@@ -126,8 +126,90 @@ class SubscriptionServiceTest {
         when(userRepository.existsById(userId)).thenReturn(true);
         when(subscriptionRepository.findFirstByUserIdAndStatusIn(eq(userId), any(EnumSet.class)))
                 .thenReturn(Optional.empty());
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.SUSPENSA))
+                .thenReturn(Optional.empty());
 
         assertThat(subscriptionService.getActive(userId)).isNull();
+    }
+
+    @Test
+    void getActiveShouldFallbackToSuspended() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.PREMIUM);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.SUSPENSA);
+        s.setAutoRenew(false);
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusIn(eq(userId), any(EnumSet.class)))
+                .thenReturn(Optional.empty());
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.SUSPENSA))
+                .thenReturn(Optional.of(s));
+
+        var resp = subscriptionService.getActive(userId);
+        assertThat(resp).isNotNull();
+        assertThat(resp.getStatus()).isEqualTo(SubscriptionStatus.SUSPENSA);
+    }
+
+    @Test
+    void resumeShouldRestoreActiveAutoRenew() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.BASICO);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.CANCELAMENTO_AGENDADO);
+        s.setAutoRenew(false);
+        s.setCancelRequestedAt(Instant.parse("2025-03-15T00:00:00Z"));
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.CANCELAMENTO_AGENDADO))
+                .thenReturn(Optional.of(s));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resp = subscriptionService.resume(userId);
+        assertThat(resp.getStatus()).isEqualTo(SubscriptionStatus.ATIVA);
+        assertThat(resp.isAutoRenew()).isTrue();
+        verify(subscriptionCache).evictActive(userId);
+    }
+
+    @Test
+    void reactivateShouldOpenNewCycleWhenExpired() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.PREMIUM);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.SUSPENSA);
+        s.setAutoRenew(false);
+        s.setRenewalFailures(3);
+        s.setSuspendedAt(Instant.parse("2025-04-10T02:00:00Z"));
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.existsByUserIdAndStatusIn(eq(userId), any())).thenReturn(false);
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.SUSPENSA))
+                .thenReturn(Optional.of(s));
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-04-12"));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resp = subscriptionService.reactivate(userId);
+        assertThat(resp.getStatus()).isEqualTo(SubscriptionStatus.ATIVA);
+        assertThat(resp.isAutoRenew()).isTrue();
+        assertThat(resp.getRenewalFailures()).isEqualTo(0);
+        assertThat(resp.getDataInicio()).isEqualTo(LocalDate.parse("2025-04-12"));
+        assertThat(resp.getDataExpiracao()).isEqualTo(LocalDate.parse("2025-05-12"));
     }
 
     @Test

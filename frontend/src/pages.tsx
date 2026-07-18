@@ -188,6 +188,34 @@ export function ContaPage() {
     }
   }
 
+  async function resume() {
+    if (!user) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api.resumeSubscription(user.id)
+      setSubscription(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível retomar.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reactivate() {
+    if (!user) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api.reactivateSubscription(user.id)
+      setSubscription(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível reativar.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="shell page stack">
       <header className="topbar">
@@ -220,7 +248,12 @@ export function ContaPage() {
                   : ''}
             </p>
             {subscription.status === 'SUSPENSA' && (
-              <p className="error">A renovação falhou após várias tentativas. Nesta versão ainda não há reativação pelo portal.</p>
+              <>
+                <p className="error">A renovação falhou após várias tentativas. Você pode reativar para abrir um novo ciclo.</p>
+                <button className="btn btn-primary" type="button" disabled={busy} onClick={reactivate}>
+                  {busy ? 'Reativando…' : 'Reativar assinatura'}
+                </button>
+              </>
             )}
             {subscription.status === 'ATIVA' && (
               <button className="btn btn-danger" type="button" disabled={busy} onClick={cancel}>
@@ -228,7 +261,9 @@ export function ContaPage() {
               </button>
             )}
             {subscription.status === 'CANCELAMENTO_AGENDADO' && (
-              <Link className="btn btn-ghost" to="/">Ver planos</Link>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={resume}>
+                {busy ? 'Retomando…' : 'Manter assinatura'}
+              </button>
             )}
           </>
         )}

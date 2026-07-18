@@ -20,6 +20,8 @@ public interface SubscriptionRepository extends JpaRepository<SubscriptionEntity
 
     Optional<SubscriptionEntity> findFirstByUserIdAndStatusIn(UUID userId, Collection<SubscriptionStatus> statuses);
 
+    Optional<SubscriptionEntity> findFirstByUserIdAndStatusOrderByUpdatedAtDesc(UUID userId, SubscriptionStatus status);
+
     List<SubscriptionEntity> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
