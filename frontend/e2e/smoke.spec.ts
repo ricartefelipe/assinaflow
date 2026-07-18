@@ -26,15 +26,17 @@ test.describe('subscriber smoke', () => {
     await page.getByRole('button', { name: /Ativar/ }).click()
 
     await expect(page.getByRole('heading', { name: 'Minha assinatura' })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText(/Ativa|Premium|Básico|Família/)).toBeVisible()
+    await expect(page.getByText('Ativa', { exact: true })).toBeVisible()
 
     await page.getByRole('link', { name: 'Trocar plano' }).click()
     await expect(page.getByRole('heading', { name: 'Trocar plano' })).toBeVisible()
-    await page.getByRole('button', { name: /Mudar para|Escolha/ }).first().click()
+    await page.getByRole('button', { name: /Mudar para/ }).click()
 
     await expect(page.getByRole('heading', { name: 'Minha assinatura' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('Ativa', { exact: true })).toBeVisible()
 
+    page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Cancelar assinatura' }).click()
-    await expect(page.getByText(/Cancelamento agendado|cancelamento/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Cancelamento agendado/i)).toBeVisible({ timeout: 15_000 })
   })
 })
