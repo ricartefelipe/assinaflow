@@ -25,4 +25,5 @@ public interface OutboxRepository extends JpaRepository<OutboxEventEntity, UUID>
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
     List<OutboxEventEntity> lockPendingReady(@Param("now") Instant now, @Param("limit") int limit);
+    List<OutboxEventEntity> findByStatusOrderByCreatedAtDesc(OutboxStatus status, org.springframework.data.domain.Pageable pageable);
 }

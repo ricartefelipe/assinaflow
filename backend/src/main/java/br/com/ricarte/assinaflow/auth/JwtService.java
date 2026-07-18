@@ -31,11 +31,12 @@ public class JwtService {
         this.expiration = expiration;
     }
 
-    public String createToken(UUID userId, String email) {
+    public String createToken(UUID userId, String email, String role) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("email", email)
+                .claim("role", role)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiration)))
                 .signWith(key)
@@ -52,5 +53,10 @@ public class JwtService {
 
     public UUID userId(Claims claims) {
         return UUID.fromString(claims.getSubject());
+    }
+
+    public String role(Claims claims) {
+        Object role = claims.get("role");
+        return role != null ? role.toString() : "USER";
     }
 }

@@ -10,6 +10,7 @@ export interface User {
   id: string
   email: string
   nome: string
+  role?: 'USER' | 'ADMIN'
 }
 
 export interface PlanInfo {

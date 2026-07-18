@@ -10,6 +10,7 @@ import br.com.ricarte.assinaflow.user.PaymentProfileEntity;
 import br.com.ricarte.assinaflow.user.PaymentProfileRepository;
 import br.com.ricarte.assinaflow.user.UserEntity;
 import br.com.ricarte.assinaflow.user.UserRepository;
+import br.com.ricarte.assinaflow.user.UserRole;
 import br.com.ricarte.assinaflow.user.dto.UserResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class AuthService {
         user.setEmail(req.getEmail());
         user.setNome(req.getNome());
         user.setPasswordHash(passwordEncoder.encode(req.getSenha()));
+        user.setRole(UserRole.USER);
         user = userRepository.save(user);
 
         PaymentProfileEntity profile = new PaymentProfileEntity();
@@ -83,7 +85,8 @@ public class AuthService {
     }
 
     private AuthResponse toAuthResponse(UserEntity user, PaymentProfileEntity profile) {
-        String token = jwtService.createToken(user.getId(), user.getEmail());
+        UserRole role = user.getRole() != null ? user.getRole() : UserRole.USER;
+        String token = jwtService.createToken(user.getId(), user.getEmail(), role.name());
         return new AuthResponse(token, toUserResponse(user, profile));
     }
 
@@ -92,6 +95,7 @@ public class AuthService {
         res.setId(user.getId());
         res.setEmail(user.getEmail());
         res.setNome(user.getNome());
+        res.setRole(user.getRole() != null ? user.getRole() : UserRole.USER);
         if (profile != null) {
             res.setPaymentBehavior(profile.getBehavior());
             res.setPaymentFailNextN(profile.getFailNextN());

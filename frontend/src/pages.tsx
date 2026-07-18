@@ -222,6 +222,7 @@ export function ContaPage() {
         <Link className="brand" to="/">AssinaFlow</Link>
         <div className="nav-actions">
           <span className="muted">{user.nome}</span>
+          {user.role === 'ADMIN' && <Link className="btn btn-ghost" to="/admin">Admin</Link>}
           <button className="btn btn-ghost" type="button" onClick={logout}>Sair</button>
         </div>
       </header>
@@ -443,6 +444,111 @@ export function TrocarPlanoPage() {
         >
           {busy ? 'Salvando…' : selected ? `Mudar para ${planLabel(selected)}` : 'Escolha um plano'}
         </button>
+      </section>
+    </div>
+  )
+}
+
+export function AdminPage() {
+  const { user, loading } = useAuth()
+  const [users, setUsers] = useState<Array<{ id: string; email: string; nome: string; paymentBehavior?: string; paymentFailNextN?: number }>>([])
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [outbox, setOutbox] = useState<Array<{ id: string; eventType: string; status: string; lastError?: string }>>([])
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    const [u, s, o] = await Promise.all([
+      api.adminListUsers(),
+      api.adminListSubscriptions(),
+      api.adminListOutbox('DEAD'),
+    ])
+    setUsers(u as Array<{ id: string; email: string; nome: string; paymentBehavior?: string; paymentFailNextN?: number }>)
+    setSubscriptions(s)
+    setOutbox(o)
+  }
+
+  useEffect(() => {
+    if (!user || user.role !== 'ADMIN') return
+    refresh().catch((err) => {
+      setError(err instanceof ApiError ? err.message : 'Falha ao carregar admin.')
+    })
+  }, [user])
+
+  if (loading) {
+    return <div className="shell page"><p className="muted">Carregando…</p></div>
+  }
+  if (!user) {
+    return <Navigate to="/entrar" replace />
+  }
+  if (user.role !== 'ADMIN') {
+    return <Navigate to="/conta" replace />
+  }
+
+  async function requeue(id: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.adminRequeueOutbox(id)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao reenfileirar.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setDecline(userId: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.adminUpdatePaymentProfile(userId, 'ALWAYS_DECLINE', 0)
+      await refresh()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao atualizar perfil.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="shell page stack">
+      <header className="topbar">
+        <Link className="brand" to="/">AssinaFlow</Link>
+        <Link className="btn btn-ghost" to="/conta">Minha conta</Link>
+      </header>
+      <section className="panel stack">
+        <h2>Admin</h2>
+        {error && <p className="error">{error}</p>}
+        <h3>Usuários</h3>
+        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
+          {users.map((u) => (
+            <li key={u.id}>
+              {u.nome} — {u.email} ({u.paymentBehavior ?? 'ALWAYS_APPROVE'})
+              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => setDecline(u.id)}>
+                Forçar decline
+              </button>
+            </li>
+          ))}
+        </ul>
+        <h3>Assinaturas</h3>
+        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
+          {subscriptions.map((s) => (
+            <li key={s.id}>{planLabel(s.plano)} — {s.status} — {s.usuarioId}</li>
+          ))}
+        </ul>
+        <h3>Outbox DEAD</h3>
+        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
+          {outbox.map((e) => (
+            <li key={e.id}>
+              {e.eventType} — {e.lastError || 'sem erro'}
+              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => requeue(e.id)}>
+                Requeue
+              </button>
+            </li>
+          ))}
+          {outbox.length === 0 && <li className="muted">Nenhum evento DEAD.</li>}
+        </ul>
       </section>
     </div>
   )

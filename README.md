@@ -91,8 +91,15 @@ OpenAPI JSON:
 ### Planos
 - GET `/api/v1/plans`
 
-### Assinaturas
-- POST `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
+### Admin
+- GET `/api/v1/admin/users` (ROLE_ADMIN)
+- GET `/api/v1/admin/subscriptions` (ROLE_ADMIN)
+- GET `/api/v1/admin/outbox?status=DEAD` (ROLE_ADMIN)
+- POST `/api/v1/admin/outbox/{id}/requeue` (ROLE_ADMIN)
+- PUT `/api/v1/admin/users/{userId}/payment-profile` (ROLE_ADMIN)
+
+Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email';` e faca login de novo.
+
 - GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa; JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)

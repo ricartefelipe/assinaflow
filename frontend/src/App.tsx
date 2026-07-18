@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
-import { CadastroPage, ContaPage, ContratarPage, EntrarPage, HomePage, TrocarPlanoPage } from './pages'
+import { AdminPage, CadastroPage, ContaPage, ContratarPage, EntrarPage, HomePage, TrocarPlanoPage } from './pages'
 import './styles.css'
 
 export default function App() {
@@ -14,6 +14,7 @@ export default function App() {
           <Route path="/conta" element={<ContaPage />} />
           <Route path="/contratar" element={<ContratarPage />} />
           <Route path="/trocar-plano" element={<TrocarPlanoPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

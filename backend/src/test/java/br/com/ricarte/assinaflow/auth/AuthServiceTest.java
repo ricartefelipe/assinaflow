@@ -88,7 +88,7 @@ class AuthServiceTest {
             return u;
         });
         when(paymentProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(jwtService.createToken(any(UUID.class), any())).thenReturn("token");
+        when(jwtService.createToken(any(UUID.class), any(), any())).thenReturn("token");
 
         var res = authService.register(req);
 

@@ -100,4 +100,27 @@ export const api = {
       body: JSON.stringify({ plano }),
     }, true) as Promise<Subscription>
   },
+
+  adminListUsers(): Promise<User[]> {
+    return request<User[]>('/api/v1/admin/users', {}, true) as Promise<User[]>
+  },
+
+  adminListSubscriptions(): Promise<Subscription[]> {
+    return request<Subscription[]>('/api/v1/admin/subscriptions', {}, true) as Promise<Subscription[]>
+  },
+
+  adminListOutbox(status = 'DEAD'): Promise<Array<{ id: string; eventType: string; status: string; lastError?: string }>> {
+    return request(`/api/v1/admin/outbox?status=${status}`, {}, true) as Promise<Array<{ id: string; eventType: string; status: string; lastError?: string }>>
+  },
+
+  adminRequeueOutbox(id: string): Promise<unknown> {
+    return request(`/api/v1/admin/outbox/${id}/requeue`, { method: 'POST' }, true)
+  },
+
+  adminUpdatePaymentProfile(userId: string, behavior: string, failNextN: number): Promise<User> {
+    return request<User>(`/api/v1/admin/users/${userId}/payment-profile`, {
+      method: 'PUT',
+      body: JSON.stringify({ behavior, failNextN }),
+    }, true) as Promise<User>
+  },
 }

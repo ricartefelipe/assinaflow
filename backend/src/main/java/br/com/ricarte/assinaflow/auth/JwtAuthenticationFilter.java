@@ -36,10 +36,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 try {
                     Claims claims = jwtService.parse(token);
                     UUID userId = jwtService.userId(claims);
+                    String role = jwtService.role(claims);
                     var auth = new UsernamePasswordAuthenticationToken(
                             userId.toString(),
                             null,
-                            AuthorityUtils.createAuthorityList("ROLE_USER")
+                            AuthorityUtils.createAuthorityList("ROLE_" + role)
                     );
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 } catch (JwtException | IllegalArgumentException ignored) {

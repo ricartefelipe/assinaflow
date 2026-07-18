@@ -24,6 +24,10 @@ public class UserEntity {
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 20)
+    private UserRole role = UserRole.USER;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "timestamp with time zone")
     private Instant createdAt;
 
@@ -58,6 +62,10 @@ public class UserEntity {
         return passwordHash;
     }
 
+    public UserRole getRole() {
+        return role;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -80,5 +88,9 @@ public class UserEntity {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public void setRole(UserRole role) {
+        this.role = role;
     }
 }

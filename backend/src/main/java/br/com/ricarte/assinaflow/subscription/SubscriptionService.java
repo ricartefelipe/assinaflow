@@ -273,7 +273,7 @@ public class SubscriptionService {
         }
     }
 
-    static SubscriptionResponse toResponse(SubscriptionEntity s) {
+    public static SubscriptionResponse toResponse(SubscriptionEntity s) {
         SubscriptionResponse r = new SubscriptionResponse();
         r.setId(s.getId());
         r.setUsuarioId(s.getUserId());

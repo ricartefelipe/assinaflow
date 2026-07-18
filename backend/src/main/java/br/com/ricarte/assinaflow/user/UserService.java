@@ -30,6 +30,7 @@ public class UserService {
         UserEntity user = new UserEntity();
         user.setEmail(req.getEmail());
         user.setNome(req.getNome());
+        user.setRole(UserRole.USER);
         user = userRepository.save(user);
 
         PaymentProfileRequest pr = req.getPaymentProfile();
@@ -74,6 +75,7 @@ public class UserService {
         res.setId(user.getId());
         res.setEmail(user.getEmail());
         res.setNome(user.getNome());
+        res.setRole(user.getRole() != null ? user.getRole() : UserRole.USER);
 
         if (profile != null) {
             res.setPaymentBehavior(profile.getBehavior());
