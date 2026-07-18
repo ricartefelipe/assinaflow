@@ -93,4 +93,11 @@ export const api = {
       method: 'POST',
     }, true) as Promise<Subscription>
   },
+
+  changePlan(userId: string, plano: Plan): Promise<Subscription> {
+    return request<Subscription>(`/api/v1/users/${userId}/subscriptions/change-plan`, {
+      method: 'POST',
+      body: JSON.stringify({ plano }),
+    }, true) as Promise<Subscription>
+  },
 }

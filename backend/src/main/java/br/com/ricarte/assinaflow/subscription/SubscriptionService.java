@@ -1,8 +1,10 @@
 package br.com.ricarte.assinaflow.subscription;
 
+import br.com.ricarte.assinaflow.common.exception.BadRequestException;
 import br.com.ricarte.assinaflow.common.exception.ConflictException;
 import br.com.ricarte.assinaflow.common.exception.NotFoundException;
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
+import br.com.ricarte.assinaflow.subscription.dto.ChangePlanRequest;
 import br.com.ricarte.assinaflow.subscription.dto.CreateSubscriptionRequest;
 import br.com.ricarte.assinaflow.subscription.dto.SubscriptionResponse;
 import br.com.ricarte.assinaflow.user.UserRepository;
@@ -172,6 +174,26 @@ public class SubscriptionService {
         s.setRenewalInFlightUntil(null);
         s.setSuspendedAt(null);
 
+        s = subscriptionRepository.save(s);
+        subscriptionCache.evictActive(userId);
+        return toResponse(s);
+    }
+
+    @Transactional
+    public SubscriptionResponse changePlan(UUID userId, ChangePlanRequest req) {
+        requireUser(userId);
+
+        SubscriptionEntity s = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByUpdatedAtDesc(userId, SubscriptionStatus.ATIVA)
+                .orElseThrow(() -> new NotFoundException(
+                        "SUBSCRIPTION_NOT_FOUND",
+                        "Assinatura ativa nao encontrada."));
+
+        if (s.getPlan() == req.getPlano()) {
+            throw new BadRequestException("PLAN_UNCHANGED", "A assinatura ja esta neste plano.");
+        }
+
+        s.setPlan(req.getPlano());
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);
         return toResponse(s);

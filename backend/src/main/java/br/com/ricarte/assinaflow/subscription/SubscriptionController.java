@@ -1,5 +1,6 @@
 package br.com.ricarte.assinaflow.subscription;
 
+import br.com.ricarte.assinaflow.subscription.dto.ChangePlanRequest;
 import br.com.ricarte.assinaflow.subscription.dto.CreateSubscriptionRequest;
 import br.com.ricarte.assinaflow.subscription.dto.SubscriptionResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -115,5 +116,22 @@ public class SubscriptionController {
     })
     public SubscriptionResponse reactivate(@PathVariable UUID userId) {
         return subscriptionService.reactivate(userId);
+    }
+
+    @PostMapping("/change-plan")
+    @Operation(
+            summary = "Troca o plano da assinatura ativa",
+            description = "Altera o plano imediatamente e mantem as datas do ciclo atual (sem proporcional)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Plano atualizado"),
+            @ApiResponse(responseCode = "400", description = "Plano igual ao atual"),
+            @ApiResponse(responseCode = "404", description = "Assinatura ativa nao encontrada")
+    })
+    public SubscriptionResponse changePlan(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ChangePlanRequest req
+    ) {
+        return subscriptionService.changePlan(userId, req);
     }
 }

@@ -256,9 +256,12 @@ export function ContaPage() {
               </>
             )}
             {subscription.status === 'ATIVA' && (
-              <button className="btn btn-danger" type="button" disabled={busy} onClick={cancel}>
-                {busy ? 'Cancelando…' : 'Cancelar assinatura'}
-              </button>
+              <div className="stack" style={{ gap: '0.75rem' }}>
+                <Link className="btn btn-ghost" to="/trocar-plano">Trocar plano</Link>
+                <button className="btn btn-danger" type="button" disabled={busy} onClick={cancel}>
+                  {busy ? 'Cancelando…' : 'Cancelar assinatura'}
+                </button>
+              </div>
             )}
             {subscription.status === 'CANCELAMENTO_AGENDADO' && (
               <button className="btn btn-primary" type="button" disabled={busy} onClick={resume}>
@@ -337,6 +340,104 @@ export function ContratarPage() {
         {error && <p className="error">{error}</p>}
         <button className="btn btn-primary" type="button" disabled={busy} onClick={confirm}>
           {busy ? 'Ativando…' : `Ativar ${planLabel(selected)}`}
+        </button>
+      </section>
+    </div>
+  )
+}
+
+export function TrocarPlanoPage() {
+  const { user, loading } = useAuth()
+  const navigate = useNavigate()
+  const [plans, setPlans] = useState<PlanInfo[]>([])
+  const [current, setCurrent] = useState<Subscription | null>(null)
+  const [selected, setSelected] = useState<Plan | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    Promise.all([api.listPlans(), api.getActive(user.id)])
+      .then(([planList, sub]) => {
+        setPlans(planList)
+        setCurrent(sub)
+        if (sub && sub.status === 'ATIVA') {
+          const next = planList.find((p) => p.plano !== sub.plano)?.plano ?? null
+          setSelected(next)
+        }
+      })
+      .catch(() => {
+        setPlans([])
+        setCurrent(null)
+      })
+      .finally(() => setReady(true))
+  }, [user])
+
+  if (loading || !ready) {
+    return <div className="shell page"><p className="muted">Carregando…</p></div>
+  }
+
+  if (!user) {
+    return <Navigate to="/entrar" replace />
+  }
+
+  if (!current || current.status !== 'ATIVA') {
+    return <Navigate to="/conta" replace />
+  }
+
+  async function confirm() {
+    if (!selected) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.changePlan(user!.id, selected)
+      navigate('/conta')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível trocar o plano.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="shell page stack">
+      <header className="topbar">
+        <Link className="brand" to="/">AssinaFlow</Link>
+        <Link className="btn btn-ghost" to="/conta">Minha conta</Link>
+      </header>
+      <section className="panel stack">
+        <h2>Trocar plano</h2>
+        <p className="muted">
+          Plano atual: {planLabel(current.plano)}. A troca vale imediatamente e mantém o ciclo até{' '}
+          {current.dataExpiracao}.
+        </p>
+        <div className="plans">
+          {plans.map((plan) => {
+            const isCurrent = plan.plano === current.plano
+            return (
+              <button
+                key={plan.plano}
+                type="button"
+                className={`plan ${selected === plan.plano ? 'featured' : ''}`}
+                onClick={() => !isCurrent && setSelected(plan.plano)}
+                disabled={isCurrent}
+                style={{ textAlign: 'left', cursor: isCurrent ? 'default' : 'pointer', width: '100%', opacity: isCurrent ? 0.55 : 1 }}
+              >
+                <h3>{planLabel(plan.plano)}{isCurrent ? ' (atual)' : ''}</h3>
+                <p className="price">{formatPrice(plan.precoCentavos, plan.moeda)}</p>
+              </button>
+            )
+          })}
+        </div>
+        {error && <p className="error">{error}</p>}
+        <button
+          className="btn btn-primary"
+          type="button"
+          disabled={busy || !selected || selected === current.plano}
+          onClick={confirm}
+        >
+          {busy ? 'Salvando…' : selected ? `Mudar para ${planLabel(selected)}` : 'Escolha um plano'}
         </button>
       </section>
     </div>

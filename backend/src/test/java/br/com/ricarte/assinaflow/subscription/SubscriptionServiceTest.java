@@ -1,8 +1,10 @@
 package br.com.ricarte.assinaflow.subscription;
 
+import br.com.ricarte.assinaflow.common.exception.BadRequestException;
 import br.com.ricarte.assinaflow.common.exception.ConflictException;
 import br.com.ricarte.assinaflow.common.exception.NotFoundException;
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
+import br.com.ricarte.assinaflow.subscription.dto.ChangePlanRequest;
 import br.com.ricarte.assinaflow.subscription.dto.CreateSubscriptionRequest;
 import br.com.ricarte.assinaflow.user.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -210,6 +212,57 @@ class SubscriptionServiceTest {
         assertThat(resp.getRenewalFailures()).isEqualTo(0);
         assertThat(resp.getDataInicio()).isEqualTo(LocalDate.parse("2025-04-12"));
         assertThat(resp.getDataExpiracao()).isEqualTo(LocalDate.parse("2025-05-12"));
+    }
+
+    @Test
+    void changePlanShouldUpdateActiveSubscription() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.BASICO);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.ATIVA);
+        s.setAutoRenew(true);
+
+        ChangePlanRequest req = new ChangePlanRequest();
+        req.setPlano(Plan.PREMIUM);
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.ATIVA))
+                .thenReturn(Optional.of(s));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resp = subscriptionService.changePlan(userId, req);
+        assertThat(resp.getPlano()).isEqualTo(Plan.PREMIUM);
+        assertThat(resp.getDataExpiracao()).isEqualTo(LocalDate.parse("2025-04-10"));
+        verify(subscriptionCache).evictActive(userId);
+    }
+
+    @Test
+    void changePlanShouldRejectSamePlan() {
+        UUID userId = UUID.randomUUID();
+        SubscriptionEntity s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(userId);
+        s.setPlan(Plan.PREMIUM);
+        s.setStartDate(LocalDate.parse("2025-03-10"));
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        s.setStatus(SubscriptionStatus.ATIVA);
+
+        ChangePlanRequest req = new ChangePlanRequest();
+        req.setPlano(Plan.PREMIUM);
+
+        when(userRepository.existsById(userId)).thenReturn(true);
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByUpdatedAtDesc(
+                userId, SubscriptionStatus.ATIVA))
+                .thenReturn(Optional.of(s));
+
+        assertThatThrownBy(() -> subscriptionService.changePlan(userId, req))
+                .isInstanceOf(BadRequestException.class);
+        verify(subscriptionRepository, never()).save(any());
     }
 
     @Test
