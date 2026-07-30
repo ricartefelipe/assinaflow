@@ -1,7 +1,5 @@
 # Backlog completo — Implementation Plan
 
-> **For agentic workers:** Execute PRs in order. Prefer inline execution in one session. Checkboxes track progress.
-
 **Goal:** Entregar gateway, proration, notificações, admin e Playwright em cinco PRs sequenciais para `develop`.
 
 **Architecture:** Fatias verticais; `PaymentGateway` unifica cobrança; proration usa gateway + crédito; notificações reutilizam outbox; admin por role JWT; e2e no frontend.
