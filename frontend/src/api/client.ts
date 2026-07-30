@@ -1,4 +1,14 @@
-import { ApiError, type AuthResponse, type Plan, type PlanInfo, type ProblemDetail, type Subscription, type User } from '../types'
+import {
+  ApiError,
+  type AuthResponse,
+  type OutboxEvent,
+  type PaymentBehavior,
+  type Plan,
+  type PlanInfo,
+  type ProblemDetail,
+  type Subscription,
+  type User,
+} from '../types'
 
 const TOKEN_KEY = 'assinaflow.token'
 
@@ -101,23 +111,23 @@ export const api = {
     }, true) as Promise<Subscription>
   },
 
-  adminListUsers(): Promise<User[]> {
-    return request<User[]>('/api/v1/admin/users', {}, true) as Promise<User[]>
+  adminListUsers(limit = 100): Promise<User[]> {
+    return request<User[]>(`/api/v1/admin/users?limit=${limit}`, {}, true) as Promise<User[]>
   },
 
-  adminListSubscriptions(): Promise<Subscription[]> {
-    return request<Subscription[]>('/api/v1/admin/subscriptions', {}, true) as Promise<Subscription[]>
+  adminListSubscriptions(limit = 100): Promise<Subscription[]> {
+    return request<Subscription[]>(`/api/v1/admin/subscriptions?limit=${limit}`, {}, true) as Promise<Subscription[]>
   },
 
-  adminListOutbox(status = 'DEAD'): Promise<Array<{ id: string; eventType: string; status: string; lastError?: string }>> {
-    return request(`/api/v1/admin/outbox?status=${status}`, {}, true) as Promise<Array<{ id: string; eventType: string; status: string; lastError?: string }>>
+  adminListOutbox(status = 'DEAD', limit = 50): Promise<OutboxEvent[]> {
+    return request<OutboxEvent[]>(`/api/v1/admin/outbox?status=${status}&limit=${limit}`, {}, true) as Promise<OutboxEvent[]>
   },
 
-  adminRequeueOutbox(id: string): Promise<unknown> {
-    return request(`/api/v1/admin/outbox/${id}/requeue`, { method: 'POST' }, true)
+  adminRequeueOutbox(id: string): Promise<OutboxEvent> {
+    return request<OutboxEvent>(`/api/v1/admin/outbox/${id}/requeue`, { method: 'POST' }, true) as Promise<OutboxEvent>
   },
 
-  adminUpdatePaymentProfile(userId: string, behavior: string, failNextN: number): Promise<User> {
+  adminUpdatePaymentProfile(userId: string, behavior: PaymentBehavior, failNextN: number): Promise<User> {
     return request<User>(`/api/v1/admin/users/${userId}/payment-profile`, {
       method: 'PUT',
       body: JSON.stringify({ behavior, failNextN }),
