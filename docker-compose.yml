@@ -55,7 +55,7 @@ services:
       APP_SCHEDULER_ENABLED: "true"
       APP_PAYMENTS_ASYNC_ENABLED: "true"
       JWT_SECRET: "docker-dev-only-change-me-assinaflow-secret-key"
-      APP_CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+      APP_CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:9084"
     ports:
       - "8080:8080"
     depends_on:
@@ -65,6 +65,15 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "9084:80"
+    depends_on:
+      - app
 
 volumes:
   pgdata:
