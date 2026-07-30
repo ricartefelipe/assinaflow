@@ -98,8 +98,6 @@ OpenAPI JSON:
 - POST `/api/v1/admin/outbox/{id}/requeue` (ROLE_ADMIN)
 - PUT `/api/v1/admin/users/{userId}/payment-profile` (ROLE_ADMIN)
 
-Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email';` e faca login de novo.
-
 - GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa; JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
@@ -110,14 +108,39 @@ Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@emai
 
 ---
 
-## Portal do assinante
-Em um terminal, com a API em `http://localhost:8080`:
+## Portal do assinante e console admin
+
+Com a API em `http://localhost:8080`:
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
+O Vite faz proxy de `/api` para a API. Rotas principais:
+- `/` portal e planos
+- `/entrar` login (ADMIN vai para `/admin`)
+- `/admin` dashboard operacional
+- `/admin/clientes` usuários + payment profile
+- `/admin/assinaturas` ciclos e renovação
+- `/admin/operacoes` outbox (requeue)
+
+### Demo pública (portfolio EC2)
+
+- UI: `http://54.94.163.136:9084/`
+- API / Swagger: `http://54.94.163.136:8080/swagger-ui/index.html`
+- Credenciais demo: `demo@assinaflow.test` / `demo12345` (role ADMIN)
+
+Stack completa com UI:
+
+```bash
+docker compose up -d --build
+```
+
+A UI sobe em `http://localhost:9084` com proxy same-origin para a API.
+
+Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email';` e faca login de novo.
 
 Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar (cobra via gateway) → conta (status e cancelamento).
 

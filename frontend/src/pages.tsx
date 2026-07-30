@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from './api/client'
 import { useAuth } from './auth/AuthContext'
-import { ApiError, formatPrice, planLabel, type Plan, type PlanInfo, type Subscription } from './types'
+import { ApiError, formatPrice, planLabel, statusLabel, type Plan, type PlanInfo, type Subscription } from './types'
 
 export function HomePage() {
   const { user } = useAuth()
@@ -18,7 +18,10 @@ export function HomePage() {
         <div className="brand">AssinaFlow</div>
         <div className="nav-actions">
           {user ? (
-            <Link className="btn btn-primary" to="/conta">Minha conta</Link>
+            <>
+              {user.role === 'ADMIN' && <Link className="btn btn-ghost" to="/admin">Admin</Link>}
+              <Link className="btn btn-primary" to="/conta">Minha conta</Link>
+            </>
           ) : (
             <>
               <Link className="btn btn-ghost" to="/entrar">Entrar</Link>
@@ -29,6 +32,7 @@ export function HomePage() {
       </header>
 
       <section className="hero">
+        <p className="eyebrow">Cobrança recorrente</p>
         <h1>AssinaFlow</h1>
         <p>Escolha um plano, assista no seu ritmo e cancele quando quiser — sem perder o ciclo já pago.</p>
         <div className="plans">
@@ -58,7 +62,7 @@ export function CadastroPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (user) {
-    return <Navigate to="/contratar" replace />
+    return <Navigate to={user.role === 'ADMIN' ? '/admin' : '/contratar'} replace />
   }
 
   async function onSubmit(event: FormEvent) {
@@ -103,13 +107,21 @@ export function CadastroPage() {
 export function EntrarPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const next = params.get('next') || ''
+
   if (user) {
-    return <Navigate to="/conta" replace />
+    const dest = next.startsWith('/')
+      ? next
+      : user.role === 'ADMIN'
+        ? '/admin'
+        : '/conta'
+    return <Navigate to={dest} replace />
   }
 
   async function onSubmit(event: FormEvent) {
@@ -117,8 +129,14 @@ export function EntrarPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await login(email, senha)
-      navigate('/conta')
+      const logged = await login(email, senha)
+      if (next.startsWith('/')) {
+        navigate(next)
+      } else if (logged.role === 'ADMIN') {
+        navigate('/admin')
+      } else {
+        navigate('/conta')
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível entrar.')
     } finally {
@@ -127,15 +145,15 @@ export function EntrarPage() {
   }
 
   return (
-    <AuthShell title="Entrar" subtitle="Acesse sua conta AssinaFlow.">
+    <AuthShell title="Entrar" subtitle="Acesse o portal ou o console administrativo." brandFirst>
       <form className="form" onSubmit={onSubmit}>
         <label>
           E-mail
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
         </label>
         <label>
           Senha
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required minLength={8} />
+          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required minLength={8} autoComplete="current-password" />
         </label>
         {error && <p className="error">{error}</p>}
         <button className="btn btn-primary" disabled={submitting} type="submit">
@@ -238,7 +256,7 @@ export function ContaPage() {
         )}
         {subscription && (
           <>
-            <div className="status-pill">{statusLabel(subscription.status)}</div>
+            <div className={`status-pill status-${subscription.status}`}>{statusLabel(subscription.status)}</div>
             <h3>{planLabel(subscription.plano)}</h3>
             <p className="muted">
               Ciclo de {subscription.dataInicio} até {subscription.dataExpiracao}.
@@ -449,139 +467,26 @@ export function TrocarPlanoPage() {
   )
 }
 
-export function AdminPage() {
-  const { user, loading } = useAuth()
-  const [users, setUsers] = useState<Array<{ id: string; email: string; nome: string; paymentBehavior?: string; paymentFailNextN?: number }>>([])
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
-  const [outbox, setOutbox] = useState<Array<{ id: string; eventType: string; status: string; lastError?: string }>>([])
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function refresh() {
-    const [u, s, o] = await Promise.all([
-      api.adminListUsers(),
-      api.adminListSubscriptions(),
-      api.adminListOutbox('DEAD'),
-    ])
-    setUsers(u as Array<{ id: string; email: string; nome: string; paymentBehavior?: string; paymentFailNextN?: number }>)
-    setSubscriptions(s)
-    setOutbox(o)
-  }
-
-  useEffect(() => {
-    if (!user || user.role !== 'ADMIN') return
-    refresh().catch((err) => {
-      setError(err instanceof ApiError ? err.message : 'Falha ao carregar admin.')
-    })
-  }, [user])
-
-  if (loading) {
-    return <div className="shell page"><p className="muted">Carregando…</p></div>
-  }
-  if (!user) {
-    return <Navigate to="/entrar" replace />
-  }
-  if (user.role !== 'ADMIN') {
-    return <Navigate to="/conta" replace />
-  }
-
-  async function requeue(id: string) {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.adminRequeueOutbox(id)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Falha ao reenfileirar.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function setDecline(userId: string) {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.adminUpdatePaymentProfile(userId, 'ALWAYS_DECLINE', 0)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Falha ao atualizar perfil.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function AuthShell({
+  title,
+  subtitle,
+  children,
+  brandFirst = false,
+}: {
+  title: string
+  subtitle: string
+  children: ReactNode
+  brandFirst?: boolean
+}) {
   return (
-    <div className="shell page stack">
-      <header className="topbar">
-        <Link className="brand" to="/">AssinaFlow</Link>
-        <Link className="btn btn-ghost" to="/conta">Minha conta</Link>
-      </header>
-      <section className="panel stack">
-        <h2>Admin</h2>
-        {error && <p className="error">{error}</p>}
-        <h3>Usuários</h3>
-        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-          {users.map((u) => (
-            <li key={u.id}>
-              {u.nome} — {u.email} ({u.paymentBehavior ?? 'ALWAYS_APPROVE'})
-              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => setDecline(u.id)}>
-                Forçar decline
-              </button>
-            </li>
-          ))}
-        </ul>
-        <h3>Assinaturas</h3>
-        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-          {subscriptions.map((s) => (
-            <li key={s.id}>{planLabel(s.plano)} — {s.status} — {s.usuarioId}</li>
-          ))}
-        </ul>
-        <h3>Outbox DEAD</h3>
-        <ul className="stack" style={{ gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-          {outbox.map((e) => (
-            <li key={e.id}>
-              {e.eventType} — {e.lastError || 'sem erro'}
-              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => requeue(e.id)}>
-                Requeue
-              </button>
-            </li>
-          ))}
-          {outbox.length === 0 && <li className="muted">Nenhum evento DEAD.</li>}
-        </ul>
-      </section>
-    </div>
-  )
-}
-
-function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <div className="shell page">
-      <header className="topbar">
-        <Link className="brand" to="/">AssinaFlow</Link>
-      </header>
-      <section className="panel stack">
-        <h2>{title}</h2>
+    <div className={`auth-screen${brandFirst ? ' brand-first' : ''}`}>
+      <div className="auth-atmosphere" aria-hidden />
+      <div className="auth-card">
+        <p className="auth-brand">AssinaFlow</p>
+        <h1>{title}</h1>
         <p className="muted">{subtitle}</p>
         {children}
-      </section>
+      </div>
     </div>
   )
-}
-
-function statusLabel(status: Subscription['status']): string {
-  switch (status) {
-    case 'ATIVA':
-      return 'Ativa'
-    case 'CANCELAMENTO_AGENDADO':
-      return 'Cancelamento agendado'
-    case 'CANCELADA':
-      return 'Cancelada'
-    case 'SUSPENSA':
-      return 'Suspensa'
-    default: {
-      const _exhaustive: never = status
-      return _exhaustive
-    }
-  }
 }

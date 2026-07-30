@@ -1,0 +1,15 @@
+services:
+  postgres:
+    ports: !override []
+  redis:
+    ports: !override []
+  rabbitmq:
+    ports: !override []
+  app:
+    environment:
+      APP_CORS_ORIGINS: "http://54.94.163.136:9084,http://54.94.163.136:8080,http://54.94.163.136,http://localhost:5173,http://localhost:9084"
+    ports: !override
+      - "8080:8080"
+  web:
+    ports: !override
+      - "9084:80"
