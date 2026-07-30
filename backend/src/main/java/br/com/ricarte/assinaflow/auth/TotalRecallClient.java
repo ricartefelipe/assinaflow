@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Map;
 
 @Component
@@ -25,8 +28,15 @@ public class TotalRecallClient {
     ) {
         this.enabled = enabled;
         this.systemSlug = systemSlug;
+        HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(8));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl.replaceAll("/$", ""))
+                .requestFactory(requestFactory)
                 .build();
     }
 
