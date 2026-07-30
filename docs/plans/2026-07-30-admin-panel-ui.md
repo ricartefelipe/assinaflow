@@ -1,7 +1,5 @@
 # Admin Panel UI Implementation Plan
 
-> **For agentic workers:** implement task-by-task. Steps use checkbox syntax.
-
 **Goal:** Painel admin polido no frontend Vite existente + deploy em `:9084`.
 
 **Architecture:** Rotas `/admin/*` com shell próprio; nginx no container `web` faz proxy same-origin para `app:8080`.
@@ -10,7 +8,7 @@
 
 ## Global Constraints
 
-- Sem menções a IA/Cursor em commits, PRs ou artefatos versionados
+- Sem trailers ou menções a ferramentas de autoria em commits, PRs ou artefatos versionados
 - GitFlow: feature → develop → release → main/master
 - Sem inventar invoices; só endpoints admin existentes
 - Sem inline imports; switch exhaustivo em TypeScript
