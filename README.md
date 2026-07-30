@@ -98,8 +98,6 @@ OpenAPI JSON:
 - POST `/api/v1/admin/outbox/{id}/requeue` (ROLE_ADMIN)
 - PUT `/api/v1/admin/users/{userId}/payment-profile` (ROLE_ADMIN)
 
-Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email';` e faca login de novo.
-
 - GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa; JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
 - GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
