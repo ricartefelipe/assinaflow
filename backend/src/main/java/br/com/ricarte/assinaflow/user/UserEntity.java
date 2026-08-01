@@ -28,6 +28,12 @@ public class UserEntity {
     @Column(name = "role", nullable = false, length = 20)
     private UserRole role = UserRole.USER;
 
+    @Column(name = "enabled", nullable = false)
+    private boolean enabled = true;
+
+    @Column(name = "expires_at", columnDefinition = "timestamp with time zone")
+    private Instant expiresAt;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "timestamp with time zone")
     private Instant createdAt;
 
@@ -66,6 +72,14 @@ public class UserEntity {
         return role;
     }
 
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -92,5 +106,13 @@ public class UserEntity {
 
     public void setRole(UserRole role) {
         this.role = role;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setExpiresAt(Instant expiresAt) {
+        this.expiresAt = expiresAt;
     }
 }

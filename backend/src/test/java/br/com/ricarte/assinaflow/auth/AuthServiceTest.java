@@ -83,6 +83,42 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginShouldRejectDisabledUserWithValidPassword() {
+        UserEntity user = new UserEntity();
+        user.setEmail("a@example.com");
+        user.setNome("A");
+        user.setPasswordHash("hash");
+        user.setEnabled(false);
+
+        LoginRequest req = new LoginRequest();
+        req.setEmail("a@example.com");
+        req.setSenha("senha12345");
+
+        when(userRepository.findByEmailIgnoreCase("a@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void loginShouldRejectExpiredUserWithValidPassword() {
+        UserEntity user = new UserEntity();
+        user.setEmail("a@example.com");
+        user.setNome("A");
+        user.setPasswordHash("hash");
+        user.setExpiresAt(java.time.Instant.now().minusSeconds(1));
+
+        LoginRequest req = new LoginRequest();
+        req.setEmail("a@example.com");
+        req.setSenha("senha12345");
+
+        when(userRepository.findByEmailIgnoreCase("a@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
     void registerShouldCreateUserAndToken() {
         RegisterRequest req = new RegisterRequest();
         req.setEmail("a@example.com");

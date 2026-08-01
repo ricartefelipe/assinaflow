@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -66,6 +67,8 @@ public class AuthService {
         if (user != null
                 && user.getPasswordHash() != null
                 && !user.getPasswordHash().isBlank()
+                && user.isEnabled()
+                && (user.getExpiresAt() == null || user.getExpiresAt().isAfter(Instant.now()))
                 && passwordEncoder.matches(req.getSenha(), user.getPasswordHash())) {
             PaymentProfileEntity profile = paymentProfileRepository.findById(user.getId()).orElse(null);
             return toAuthResponse(user, profile);
