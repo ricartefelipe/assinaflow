@@ -307,14 +307,7 @@ select {
   inset: -20%;
   background:
     radial-gradient(circle at 20% 30%, rgba(13, 92, 77, 0.28), transparent 42%),
-    radial-gradient(circle at 78% 20%, rgba(196, 137, 42, 0.2), transparent 38%),
-    repeating-linear-gradient(
-      -18deg,
-      transparent,
-      transparent 18px,
-      rgba(16, 36, 28, 0.025) 18px,
-      rgba(16, 36, 28, 0.025) 19px
-    );
+    radial-gradient(circle at 78% 20%, rgba(196, 137, 42, 0.2), transparent 38%);
   animation: drift 18s ease-in-out infinite alternate;
   pointer-events: none;
 }
@@ -322,20 +315,29 @@ select {
 .auth-card {
   position: relative;
   width: min(440px, 100%);
-  background: color-mix(in srgb, white 88%, transparent);
+  max-width: 100%;
+  background: color-mix(in srgb, white 96%, transparent);
   border: 1px solid var(--line);
   border-radius: 1.6rem;
   padding: 2rem 1.75rem;
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
   animation: rise 480ms ease both;
+  overflow: hidden;
 }
 
 .auth-brand {
   margin: 0 0 1.25rem;
-  font-size: clamp(2rem, 5vw, 2.6rem);
+  max-width: 100%;
+  font-size: clamp(1.75rem, 4.2vw, 2.15rem);
   font-weight: 800;
-  line-height: 1;
+  font-style: normal;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: none;
 }
 
 .auth-card h1 {
@@ -344,7 +346,7 @@ select {
 }
 
 .auth-screen.brand-first .auth-brand {
-  font-size: clamp(2.4rem, 7vw, 3.2rem);
+  font-size: clamp(1.85rem, 4.5vw, 2.35rem);
   margin-bottom: 1.6rem;
 }
 
