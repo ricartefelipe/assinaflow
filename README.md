@@ -131,6 +131,7 @@ O Vite faz proxy de `/api` para a API. Rotas principais:
 - UI: `http://54.94.163.136:9084/`
 - API / Swagger: `http://54.94.163.136:8080/swagger-ui/index.html`
 - Credenciais demo: `demo@assinaflow.test` / `demo12345` (role ADMIN)
+- Acesso TotalRecall: use o slug `assinaflow` e configure `TOTALRECALL_URL=https://54.94.163.136.sslip.io`.
 
 Stack completa com UI:
 
