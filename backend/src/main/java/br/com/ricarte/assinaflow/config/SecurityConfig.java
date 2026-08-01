@@ -62,6 +62,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                        .requestMatchers("/internal/v1/totalrecall/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/plans").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

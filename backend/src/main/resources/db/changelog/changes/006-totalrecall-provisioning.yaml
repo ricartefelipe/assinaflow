@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-001-users-totalrecall-provisioning
+      author: ricartefelipe
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: enabled
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expires_at
+                  type: timestamp with time zone

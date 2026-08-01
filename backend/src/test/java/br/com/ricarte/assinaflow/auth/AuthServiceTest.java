@@ -7,7 +7,6 @@ import br.com.ricarte.assinaflow.common.exception.UnauthorizedException;
 import br.com.ricarte.assinaflow.user.PaymentProfileRepository;
 import br.com.ricarte.assinaflow.user.UserEntity;
 import br.com.ricarte.assinaflow.user.UserRepository;
-import br.com.ricarte.assinaflow.user.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,9 +38,6 @@ class AuthServiceTest {
     @Mock
     JwtService jwtService;
 
-    @Mock
-    TotalRecallClient totalRecallClient;
-
     AuthService authService;
 
     @BeforeEach
@@ -50,9 +46,7 @@ class AuthServiceTest {
                 userRepository,
                 paymentProfileRepository,
                 passwordEncoder,
-                jwtService,
-                totalRecallClient,
-                "demo@assinaflow.test"
+                jwtService
         );
     }
 
@@ -83,34 +77,45 @@ class AuthServiceTest {
 
         when(userRepository.findByEmailIgnoreCase("a@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("senha12345", "hash")).thenReturn(false);
-        when(totalRecallClient.validatePassword("a@example.com", "senha12345")).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(req))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
-    void loginShouldAcceptTotalRecallCredentials() {
-        UserEntity demo = new UserEntity();
-        demo.setId(UUID.randomUUID());
-        demo.setEmail("demo@assinaflow.test");
-        demo.setNome("Demo");
-        demo.setRole(UserRole.ADMIN);
+    void loginShouldRejectDisabledUserWithValidPassword() {
+        UserEntity user = new UserEntity();
+        user.setEmail("a@example.com");
+        user.setNome("A");
+        user.setPasswordHash("hash");
+        user.setEnabled(false);
 
         LoginRequest req = new LoginRequest();
-        req.setEmail("guest@empresa.com");
-        req.setSenha("trp_secret");
+        req.setEmail("a@example.com");
+        req.setSenha("senha12345");
 
-        when(userRepository.findByEmailIgnoreCase("guest@empresa.com")).thenReturn(Optional.empty());
-        when(totalRecallClient.validatePassword("guest@empresa.com", "trp_secret")).thenReturn(true);
-        when(userRepository.findByEmailIgnoreCase("demo@assinaflow.test")).thenReturn(Optional.of(demo));
-        when(paymentProfileRepository.findById(demo.getId())).thenReturn(Optional.empty());
-        when(jwtService.createToken(demo.getId(), demo.getEmail(), "ADMIN")).thenReturn("token");
+        when(userRepository.findByEmailIgnoreCase("a@example.com")).thenReturn(Optional.of(user));
 
-        var res = authService.login(req);
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(UnauthorizedException.class);
+    }
 
-        assertThat(res.getAccessToken()).isEqualTo("token");
-        assertThat(res.getUser().getEmail()).isEqualTo("demo@assinaflow.test");
+    @Test
+    void loginShouldRejectExpiredUserWithValidPassword() {
+        UserEntity user = new UserEntity();
+        user.setEmail("a@example.com");
+        user.setNome("A");
+        user.setPasswordHash("hash");
+        user.setExpiresAt(java.time.Instant.now().minusSeconds(1));
+
+        LoginRequest req = new LoginRequest();
+        req.setEmail("a@example.com");
+        req.setSenha("senha12345");
+
+        when(userRepository.findByEmailIgnoreCase("a@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test

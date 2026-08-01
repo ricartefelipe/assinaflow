@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-renewal-credit.yaml
   - include:
       file: db/changelog/changes/005-user-role.yaml
+  - include:
+      file: db/changelog/changes/006-totalrecall-provisioning.yaml

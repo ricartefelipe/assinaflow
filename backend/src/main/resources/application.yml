@@ -77,7 +77,4 @@ app:
     cors:
       allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   totalrecall:
-    enabled: ${TOTALRECALL_ENABLED:true}
-    base-url: ${TOTALRECALL_URL:https://54.94.163.136.sslip.io}
-    system-slug: ${TOTALRECALL_SYSTEM_SLUG:assinaflow}
-    demo-admin-email: ${TOTALRECALL_DEMO_ADMIN_EMAIL:demo@assinaflow.test}
+    provision-token: ${TOTALRECALL_PROVISION_TOKEN:}

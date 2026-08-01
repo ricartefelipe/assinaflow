@@ -12,11 +12,11 @@ import br.com.ricarte.assinaflow.user.UserEntity;
 import br.com.ricarte.assinaflow.user.UserRepository;
 import br.com.ricarte.assinaflow.user.UserRole;
 import br.com.ricarte.assinaflow.user.dto.UserResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -26,23 +26,17 @@ public class AuthService {
     private final PaymentProfileRepository paymentProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final TotalRecallClient totalRecallClient;
-    private final String demoAdminEmail;
 
     public AuthService(
             UserRepository userRepository,
             PaymentProfileRepository paymentProfileRepository,
             PasswordEncoder passwordEncoder,
-            JwtService jwtService,
-            TotalRecallClient totalRecallClient,
-            @Value("${app.totalrecall.demo-admin-email:demo@assinaflow.test}") String demoAdminEmail
+            JwtService jwtService
     ) {
         this.userRepository = userRepository;
         this.paymentProfileRepository = paymentProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.totalRecallClient = totalRecallClient;
-        this.demoAdminEmail = demoAdminEmail;
     }
 
     @Transactional
@@ -73,50 +67,14 @@ public class AuthService {
         if (user != null
                 && user.getPasswordHash() != null
                 && !user.getPasswordHash().isBlank()
+                && user.isEnabled()
+                && (user.getExpiresAt() == null || user.getExpiresAt().isAfter(Instant.now()))
                 && passwordEncoder.matches(req.getSenha(), user.getPasswordHash())) {
             PaymentProfileEntity profile = paymentProfileRepository.findById(user.getId()).orElse(null);
             return toAuthResponse(user, profile);
         }
 
-        if (totalRecallClient.validatePassword(req.getEmail(), req.getSenha())) {
-            UserEntity demo = resolveDemoAdmin(req.getEmail());
-            PaymentProfileEntity profile = paymentProfileRepository.findById(demo.getId()).orElse(null);
-            return toAuthResponse(demo, profile);
-        }
-
         throw new UnauthorizedException("INVALID_CREDENTIALS", "Email ou senha invalidos.");
-    }
-
-    @Transactional
-    protected UserEntity resolveDemoAdmin(String visitorEmail) {
-        UserEntity byDemoEmail = userRepository.findByEmailIgnoreCase(demoAdminEmail).orElse(null);
-        if (byDemoEmail != null) {
-            return byDemoEmail;
-        }
-        UserEntity admin = userRepository.findFirstByRole(UserRole.ADMIN).orElse(null);
-        if (admin != null) {
-            return admin;
-        }
-
-        UserEntity visitor = userRepository.findByEmailIgnoreCase(visitorEmail).orElse(null);
-        if (visitor != null) {
-            visitor.setRole(UserRole.ADMIN);
-            return userRepository.save(visitor);
-        }
-
-        UserEntity created = new UserEntity();
-        created.setEmail(visitorEmail);
-        created.setNome("TotalRecall Guest");
-        created.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
-        created.setRole(UserRole.ADMIN);
-        created = userRepository.save(created);
-
-        PaymentProfileEntity profile = new PaymentProfileEntity();
-        profile.setUser(created);
-        profile.setBehavior(PaymentBehavior.ALWAYS_APPROVE);
-        profile.setFailNextN(0);
-        paymentProfileRepository.save(profile);
-        return created;
     }
 
     @Transactional(readOnly = true)
