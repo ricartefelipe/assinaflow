@@ -1,57 +1,97 @@
 # AssinaFlow
-Sistema de gestao de assinaturas para streaming, com renovacao automatica no vencimento, cancelamento no fim do ciclo, protecao contra concorrencia e testes reprodutiveis.
+
+[![CI](https://github.com/ricartefelipe/assinaflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ricartefelipe/assinaflow/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Commercial-red.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3-FF6600?logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+
+Sistema de gestão de assinaturas para streaming: renovação automática, cancelamento no fim do ciclo, proteção contra concorrência, idempotência e testes reprodutíveis com Testcontainers.
+
+**Autor:** [Felipe Ricarte Magalhães](https://github.com/ricartefelipe) · [Site](https://codigodeproducao.com.br/) · [LinkedIn](https://www.linkedin.com/in/felipe-ricarte-magalhaes/)
 
 Base package: `br.com.ricarte.assinaflow`
 
 ---
 
-## Ferramentas (build e testes)
-- **Java:** 21 (Temurin ou equivalente recomendado)
-- **Maven:** 3.9+, instalacao no sistema; nao há `mvnw` neste repositorio (`mvn test` deve resolver o projeto em `backend/`)
-- **Node.js:** 20+ para o portal em `frontend/` (`npm install` / `npm run dev`)
-- **Docker / Docker Compose:** para subir a stack (`docker compose up`) e para os testes de integracao (`Testcontainers`); o comando `compose` deve ser o mesmo que o Compose V2 distribuido pelo Docker CLI
+## Índice
+
+- [Visão geral](#visão-geral)
+- [Quando usar](#quando-usar)
+- [Stack](#stack)
+- [Quick Start](#quick-start)
+- [Assunções (explícitas)](#assunções-explícitas)
+- [Endpoints](#endpoints)
+- [Observabilidade](#observabilidade)
+- [Testes](#testes-maven)
+- [Licença](#licença)
 
 ---
 
-## Visao geral
-O AssinaFlow implementa:
-- Cadastro de usuarios
-- Criacao de assinatura com no maximo 1 ativa por usuario
-- Cancelamento sem cortar acesso antes do fim do ciclo
-- Renovacao automatica no vencimento em UTC (inclui assinaturas atrasadas)
-- Retry deterministico de cobranca ate 3 tentativas, com suspensao na 3a falha
-- Confiabilidade em multi instancia com lock no Postgres e idempotencia no consumidor
+## Visão geral
 
-Inclui diferenciais opcionais:
-- RabbitMQ para cobranca assincrona
-- Outbox Pattern com retry, backoff e DEAD no banco
-- Redis para cache da assinatura ativa
-- Observabilidade com requestId e metricas Prometheus
+| Área | Descrição |
+|------|-----------|
+| **Assinaturas** | No máximo 1 ativa por usuário; cancelamento sem cortar acesso antes do fim do ciclo |
+| **Renovação** | Job em UTC com recuperação de atraso e retry determinístico de cobrança (até 3 tentativas) |
+| **Concorrência** | Lock no PostgreSQL + idempotência no consumidor para execução multi-instância |
+| **Mensageria** | RabbitMQ + outbox com retry, backoff e estado DEAD |
+| **Cache** | Redis para assinatura ativa |
+| **Observabilidade** | `X-Request-Id`, logs estruturados e métricas Prometheus |
+
+---
+
+## Quando usar
+
+- Você precisa modelar **assinatura recorrente** com regras claras de ciclo, cancelamento e suspensão
+- Quer **confiabilidade multi-instância** (sem cobrança duplicada) com evidência em testes
+- Precisa de **outbox + idempotência** como parte do desenho, não como afterthought
 
 ---
 
 ## Stack
-- Java 21
-- Spring Boot 3.x
-- PostgreSQL 16+
-- Liquibase YAML
-- JPA Hibernate
-- Testes com JUnit 5, Mockito e Testcontainers (integracao marcada com tag `integration`; padrao do Maven ignora esse grupo até `-P integration-tests`)
-- Docker Compose e Dockerfile
-- OpenAPI Swagger via Springdoc
-- Logs estruturados com correlacao via X Request Id
-- Actuator Micrometer Prometheus
+
+| Camada | Tecnologia |
+|--------|------------|
+| Runtime | Java 21, Spring Boot 3.x (Maven) |
+| Dados | PostgreSQL 16+, Liquibase YAML, JPA/Hibernate |
+| Cache / filas | Redis, RabbitMQ |
+| API | OpenAPI / Swagger (Springdoc) |
+| Qualidade | JUnit 5, Mockito, Testcontainers |
+| Ops | Docker Compose, Actuator + Micrometer/Prometheus |
+
+**Ferramentas:** Maven 3.9+ (projeto em `backend/`), Node.js 20+ para o portal em `frontend/`, Docker Compose V2.
 
 ---
 
-## Assuncoes (explicitas)
+## Quick Start
+
+```bash
+docker compose up --build
+```
+
+- API: `http://localhost:8080`
+- Swagger: `http://localhost:8080/swagger-ui.html`
+- OpenAPI: `http://localhost:8080/v3/api-docs`
+- RabbitMQ UI: `http://localhost:15672` (`guest` / `guest`)
+
+Testes rápidos (`cd backend`): `mvn test`  
+Com Testcontainers: `mvn verify -P integration-tests`
+
+---
+
+## Assunções (explícitas)
 1) Timezone: UTC para calculo de datas e vencimento
 2) Semantica de dataExpiracao: dia de cobranca e limite do ciclo
     - Ciclo interpretado como intervalo [dataInicio, dataExpiracao)
     - Renovacao bem sucedida move:
         - dataInicio = dataExpiracao
         - dataExpiracao = dataExpiracao + 1 mes
-    - Assinaturas com dataExpiracao <= hoje UTC entram na fila de renovacao (recupera atraso)3) Cancelamento:
+    - Assinaturas com dataExpiracao <= hoje UTC entram na fila de renovacao (recupera atraso)
+3) Cancelamento:
     - status vira CANCELAMENTO_AGENDADO
     - autoRenew vira false
     - dataExpiracao nao muda, nao corta acesso
@@ -243,3 +283,11 @@ docker compose up --build
 O servico `app` monta backend com `SPRING_PROFILES_ACTIVE=docker`, Postgres, Redis e RabbitMQ (`5672`; interface de gerencia em `http://localhost:15672`, credenciais `guest`/`guest`).
 
 Portas liberadas tambem incluem Postgres `5432` e Redis `6379` quando precisar de clientes externos.
+
+---
+
+## Licença
+
+Licença comercial — ver [LICENSE](LICENSE) e [README-COMERCIAL.md](README-COMERCIAL.md).
+
+**Autor:** Felipe Ricarte Magalhães
