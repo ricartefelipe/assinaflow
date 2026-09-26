@@ -9,148 +9,195 @@
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3-FF6600?logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
-Sistema de gestão de assinaturas para streaming: renovação automática, cancelamento no fim do ciclo, proteção contra concorrência, idempotência e testes reprodutíveis com Testcontainers.
+Sistema de gestão de assinaturas recorrentes com foco em confiabilidade operacional.
 
-**Autor:** [Felipe Ricarte Magalhães](https://github.com/ricartefelipe) · [Site](https://codigodeproducao.com.br/) · [LinkedIn](https://www.linkedin.com/in/felipe-ricarte-magalhaes/)
-
-Base package: `br.com.ricarte.assinaflow`
-
----
-
-## Índice
-
-- [Visão geral](#visão-geral)
-- [Quando usar](#quando-usar)
-- [Stack](#stack)
-- [Quick Start](#quick-start)
-- [Assunções (explícitas)](#assunções-explícitas)
-- [Endpoints](#endpoints)
-- [Observabilidade](#observabilidade)
-- [Testes](#testes-maven)
-- [Licença](#licença)
-
----
+O AssinaFlow trata renovação automática, cancelamento ao fim do ciclo, retry de cobrança, concorrência entre instâncias, idempotência e processamento assíncrono com outbox. A proposta é evitar os problemas clássicos desse tipo de domínio: cobrança duplicada, renovação concorrente, perda de evento e inconsistência entre assinatura e pagamento.
 
 ## Visão geral
 
-| Área | Descrição |
-|------|-----------|
-| **Assinaturas** | No máximo 1 ativa por usuário; cancelamento sem cortar acesso antes do fim do ciclo |
-| **Renovação** | Job em UTC com recuperação de atraso e retry determinístico de cobrança (até 3 tentativas) |
-| **Concorrência** | Lock no PostgreSQL + idempotência no consumidor para execução multi-instância |
-| **Mensageria** | RabbitMQ + outbox com retry, backoff e estado DEAD |
-| **Cache** | Redis para assinatura ativa |
-| **Observabilidade** | `X-Request-Id`, logs estruturados e métricas Prometheus |
-
----
-
-## Quando usar
-
-- Você precisa modelar **assinatura recorrente** com regras claras de ciclo, cancelamento e suspensão
-- Quer **confiabilidade multi-instância** (sem cobrança duplicada) com evidência em testes
-- Precisa de **outbox + idempotência** como parte do desenho, não como afterthought
-
----
+| Área | Regra |
+|------|-------|
+| **Assinaturas** | No máximo uma assinatura ativa por usuário |
+| **Cancelamento** | Acesso permanece válido até o fim do ciclo |
+| **Renovação** | Job em UTC com recuperação de atrasos |
+| **Retry** | Tentativas determinísticas antes da suspensão |
+| **Concorrência** | Row lock + `SKIP LOCKED` |
+| **Idempotência** | Constraint única no consumidor |
+| **Mensageria** | RabbitMQ + outbox |
+| **Cache** | Redis |
+| **Observabilidade** | Request ID, logs e métricas Prometheus |
 
 ## Stack
 
 | Camada | Tecnologia |
 |--------|------------|
-| Runtime | Java 21, Spring Boot 3.x (Maven) |
-| Dados | PostgreSQL 16+, Liquibase YAML, JPA/Hibernate |
-| Cache / filas | Redis, RabbitMQ |
-| API | OpenAPI / Swagger (Springdoc) |
-| Qualidade | JUnit 5, Mockito, Testcontainers |
-| Ops | Docker Compose, Actuator + Micrometer/Prometheus |
+| Backend | Java 21, Spring Boot 3.x |
+| Dados | PostgreSQL 16+, JPA/Hibernate, Liquibase |
+| Cache | Redis |
+| Mensageria | RabbitMQ |
+| API | REST, OpenAPI, Swagger |
+| Testes | JUnit 5, Mockito, Testcontainers |
+| Operação | Docker Compose, Actuator, Micrometer, Prometheus |
+| Frontend | Vite / Node.js 20+ |
 
-**Ferramentas:** Maven 3.9+ (projeto em `backend/`), Node.js 20+ para o portal em `frontend/`, Docker Compose V2.
+Base package:
 
----
+```text
+br.com.ricarte.assinaflow
+```
+
+## Regras de negócio
+
+### Ciclo
+
+O sistema usa UTC para cálculo de datas.
+
+Cada ciclo é interpretado como:
+
+```text
+[dataInicio, dataExpiracao)
+```
+
+Uma renovação bem-sucedida faz:
+
+```text
+dataInicio = dataExpiracao
+dataExpiracao = dataExpiracao + 1 mês
+```
+
+Assinaturas vencidas entram novamente na fila de renovação, permitindo recuperação de atrasos.
+
+### Cancelamento
+
+Ao cancelar:
+
+- status passa para `CANCELAMENTO_AGENDADO`;
+- `autoRenew` passa para `false`;
+- `dataExpiracao` não é alterada;
+- o acesso permanece válido até o fim do ciclo;
+- após expirar, o job finaliza a assinatura como `CANCELADA`.
+
+### Retry de cobrança
+
+| Tentativa | Próxima ação |
+|----------|--------------|
+| 1ª falha | nova tentativa em 15 min |
+| 2ª falha | nova tentativa em 60 min |
+| 3ª falha | assinatura passa para `SUSPENSA` e `autoRenew=false` |
+
+Cada tentativa é registrada em `subscription_renewal_attempts`.
+
+### Processamento assíncrono
+
+- entrega `at least once`;
+- consumidor idempotente;
+- outbox publisher com retry e backoff;
+- eventos que excedem o limite de tentativas passam para `DEAD`;
+- eventos `DEAD` podem ser reenfileirados.
+
+## Concorrência e idempotência
+
+A renovação usa lock no PostgreSQL com `SKIP LOCKED`.
+
+Com duas ou mais instâncias:
+
+1. uma instância bloqueia a assinatura;
+2. as demais ignoram a linha bloqueada;
+3. a renovação não é executada em duplicidade.
+
+No fluxo assíncrono:
+
+```text
+Scheduler
+   |
+   v
+Outbox
+   |
+   v
+RabbitMQ
+   |
+   v
+Consumer idempotente
+   |
+   v
+PostgreSQL
+```
+
+A idempotência também é garantida por constraint única em:
+
+```text
+(subscription_id, cycle_expiration_date, attempt_number)
+```
 
 ## Quick Start
+
+Na raiz do repositório:
 
 ```bash
 docker compose up --build
 ```
 
+Serviços principais:
+
 - API: `http://localhost:8080`
 - Swagger: `http://localhost:8080/swagger-ui.html`
 - OpenAPI: `http://localhost:8080/v3/api-docs`
-- RabbitMQ UI: `http://localhost:15672` (`guest` / `guest`)
+- RabbitMQ UI: `http://localhost:15672`
 
-Testes rápidos (`cd backend`): `mvn test`  
-Com Testcontainers: `mvn verify -P integration-tests`
+Testes rápidos:
 
----
+```bash
+cd backend
+mvn test
+```
 
-## Assunções (explícitas)
-1) Timezone: UTC para calculo de datas e vencimento
-2) Semantica de dataExpiracao: dia de cobranca e limite do ciclo
-    - Ciclo interpretado como intervalo [dataInicio, dataExpiracao)
-    - Renovacao bem sucedida move:
-        - dataInicio = dataExpiracao
-        - dataExpiracao = dataExpiracao + 1 mes
-    - Assinaturas com dataExpiracao <= hoje UTC entram na fila de renovacao (recupera atraso)
-3) Cancelamento:
-    - status vira CANCELAMENTO_AGENDADO
-    - autoRenew vira false
-    - dataExpiracao nao muda, nao corta acesso
-    - nao renova apos expirar, job diario finaliza para CANCELADA
-4) Retry de cobranca:
-    - 1a falha, proxima tentativa em +15 min
-    - 2a falha, proxima tentativa em +60 min
-    - 3a falha, status SUSPENSA e autoRenew false
-    - cada tentativa gera registro em subscription_renewal_attempts
-5) Modo assincrono:
-    - entrega at least once
-    - consumidor idempotente por constraint unica no banco
-    - outbox publisher reintenta e marca DEAD apos maxAttempts
-    - evento DEAD da mesma tentativa e reenfileirado se a renovacao voltar a disputar a chave
+Integração com Testcontainers:
 
----
+```bash
+mvn verify -P integration-tests
+```
 
-## Endpoints
-Base URL: `http://localhost:8080`
+## API
 
-Swagger UI:
-- `/swagger-ui.html`
+### Autenticação
 
-OpenAPI JSON:
-- `/v3/api-docs`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
 
-### Auth
-- POST `/api/v1/auth/register`
-- POST `/api/v1/auth/login`
-- GET `/api/v1/auth/me` (JWT)
+### Usuários
 
-### Usuarios
-- POST `/api/v1/users`
-- GET `/api/v1/users/{userId}` (JWT + ownership)
-- PUT `/api/v1/users/{userId}/payment-profile` (JWT + ownership)
+- `POST /api/v1/users`
+- `GET /api/v1/users/{userId}`
+- `PUT /api/v1/users/{userId}/payment-profile`
 
 ### Planos
-- GET `/api/v1/plans`
 
-### Admin
-- GET `/api/v1/admin/users` (ROLE_ADMIN)
-- GET `/api/v1/admin/subscriptions` (ROLE_ADMIN)
-- GET `/api/v1/admin/outbox?status=DEAD` (ROLE_ADMIN)
-- POST `/api/v1/admin/outbox/{id}/requeue` (ROLE_ADMIN)
-- PUT `/api/v1/admin/users/{userId}/payment-profile` (ROLE_ADMIN)
+- `GET /api/v1/plans`
 
-- GET `/api/v1/users/{userId}/subscriptions/active` (`204` quando nao houver assinatura ativa; JWT + ownership)
-- GET `/api/v1/users/{userId}/subscriptions/{subscriptionId}` (JWT + ownership)
-- GET `/api/v1/users/{userId}/subscriptions` (JWT + ownership)
-- POST `/api/v1/users/{userId}/subscriptions/cancel` (JWT + ownership)
-- POST `/api/v1/users/{userId}/subscriptions/resume` (JWT + ownership)
-- POST `/api/v1/users/{userId}/subscriptions/reactivate` (JWT + ownership)
-- POST `/api/v1/users/{userId}/subscriptions/change-plan` (JWT + ownership; proration no upgrade/crédito no downgrade)
+### Assinaturas
 
----
+- `GET /api/v1/users/{userId}/subscriptions/active`
+- `GET /api/v1/users/{userId}/subscriptions/{subscriptionId}`
+- `GET /api/v1/users/{userId}/subscriptions`
+- `POST /api/v1/users/{userId}/subscriptions/cancel`
+- `POST /api/v1/users/{userId}/subscriptions/resume`
+- `POST /api/v1/users/{userId}/subscriptions/reactivate`
+- `POST /api/v1/users/{userId}/subscriptions/change-plan`
+
+O endpoint de alteração de plano trata proration no upgrade e crédito no downgrade.
+
+### Administração
+
+- `GET /api/v1/admin/users`
+- `GET /api/v1/admin/subscriptions`
+- `GET /api/v1/admin/outbox?status=DEAD`
+- `POST /api/v1/admin/outbox/{id}/requeue`
+- `PUT /api/v1/admin/users/{userId}/payment-profile`
 
 ## Portal do assinante e console admin
 
-Com a API em `http://localhost:8080`:
+Com a API disponível em `http://localhost:8080`:
 
 ```bash
 cd frontend
@@ -158,136 +205,151 @@ npm install
 npm run dev
 ```
 
-O Vite faz proxy de `/api` para a API. Rotas principais:
-- `/` portal e planos
-- `/entrar` login (ADMIN vai para `/admin`)
-- `/admin` dashboard operacional
-- `/admin/clientes` usuários + payment profile
-- `/admin/assinaturas` ciclos e renovação
-- `/admin/operacoes` outbox (requeue)
+Rotas principais:
 
-### Demo pública (portfolio EC2)
+- `/` — landing e planos
+- `/entrar` — autenticação
+- `/admin` — dashboard
+- `/admin/clientes` — clientes e payment profile
+- `/admin/assinaturas` — ciclos e renovações
+- `/admin/operacoes` — outbox e requeue
+
+A UI usa proxy de `/api` para o backend.
+
+## Demo pública
 
 - UI: `http://54.94.163.136:9084/`
-- API / Swagger: `http://54.94.163.136:8080/swagger-ui/index.html`
-- Credenciais demo: `demo@assinaflow.test` / `demo12345` (role ADMIN)
-- Login nativo com e-mail/senha (hash local). Credenciais de test drive devem ser provisionadas no banco do AssinaFlow; o TotalRecall não é modo de login.
+- Swagger: `http://54.94.163.136:8080/swagger-ui/index.html`
 
-Stack completa com UI:
+Credenciais de demonstração:
 
-```bash
-docker compose up -d --build
+```text
+demo@assinaflow.test
+demo12345
 ```
 
-A UI sobe em `http://localhost:9084` com proxy same-origin para a API.
+Papel: `ADMIN`.
 
-Para promover um admin: `UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email';` e faca login de novo.
+O login é nativo por e-mail e senha. As credenciais de demonstração são provisionadas no próprio AssinaFlow.
 
-Abra `http://localhost:5173`. Fluxo: landing de planos → cadastro/login → contratar (cobra via gateway) → conta (status e cancelamento).
+## Fluxo funcional
 
-Smoke e2e (Playwright), com a API em `http://localhost:8080`:
-
-```bash
-cd frontend
-npm run test:e2e
+```text
+landing
+→ cadastro / login
+→ contratação
+→ cobrança pelo gateway
+→ assinatura ativa
+→ renovação automática
+→ retry quando necessário
+→ cancelamento ou suspensão
 ```
 
-Variaveis uteis da API:
-- `JWT_SECRET` (minimo 32 caracteres)
-- `APP_CORS_ORIGINS` (padrao inclui `http://localhost:5173`)
-- `APP_PAYMENTS_GATEWAY` (`simulated` padrao, ou `http`)
-- `APP_PAYMENTS_HTTP_URL` (URL do stub quando gateway=`http`)
-- `APP_NOTIFICATIONS_SENDER` (`logging` padrao, ou `smtp`)
-- `APP_NOTIFICATIONS_FROM` (remetente quando sender=`smtp`)
-- `spring.mail.host` / `spring.mail.port` (SMTP)
+O gateway `simulated` permite controlar o resultado do pagamento pelo payment profile:
 
-A contratacao cobra o preco do plano via `PaymentGateway` antes de ativar. Com `simulated`, o comportamento segue o payment-profile do usuario (`ALWAYS_APPROVE` / `ALWAYS_DECLINE` / `FAIL_NEXT_N`).
-- `APP_SECURITY_ENABLED` (`false` desliga autenticacao; util em testes)
+- `ALWAYS_APPROVE`
+- `ALWAYS_DECLINE`
+- `FAIL_NEXT_N`
 
----
+## Configuração
 
-## Persistencia
+Variáveis principais:
+
+- `JWT_SECRET`
+- `APP_CORS_ORIGINS`
+- `APP_PAYMENTS_GATEWAY`
+- `APP_PAYMENTS_HTTP_URL`
+- `APP_NOTIFICATIONS_SENDER`
+- `APP_NOTIFICATIONS_FROM`
+- `spring.mail.host`
+- `spring.mail.port`
+- `APP_SECURITY_ENABLED`
+
+`APP_PAYMENTS_GATEWAY` aceita `simulated` ou `http`.
+
+`APP_NOTIFICATIONS_SENDER` aceita `logging` ou `smtp`.
+
+## Persistência
+
 Principais tabelas:
-- users
-- payment_profiles
-- subscriptions
-- subscription_renewal_attempts
-- outbox_events (extra, modo assincrono)
 
-Regras criticas no banco:
-- 1 assinatura ativa por usuario: indice unico parcial em subscriptions(user_id) para status ATIVA e CANCELAMENTO_AGENDADO
-- Idempotencia do consumidor: unique em subscription_renewal_attempts (subscription_id, cycle_expiration_date, attempt_number)
+- `users`
+- `payment_profiles`
+- `subscriptions`
+- `subscription_renewal_attempts`
+- `outbox_events`
 
----
+Regras importantes no banco:
 
-## Concorrencia e anti duplicidade
-Renovacao no banco usa row lock com SKIP LOCKED, seguro com 2 instancias:
-- Se duas instancias disputarem, apenas uma bloqueia e processa
-- A outra ignora as linhas bloqueadas e nao duplica renovacao
-
-No modo assincrono:
-- O scheduler enfileira via outbox
-- O publisher publica do outbox com SKIP LOCKED
-- O consumer aplica idempotencia no banco
-
----
+- índice único parcial garante uma assinatura ativa por usuário;
+- constraint de idempotência evita repetição de tentativa no mesmo ciclo.
 
 ## Observabilidade
-### Request Id
-- Cabecalho: `X-Request-Id`
-- Se nao vier, o servidor gera
-- O valor aparece nos logs no campo requestId
 
-### Metricas
-- Prometheus: `/actuator/prometheus`
-- Catalogo: `/actuator/metrics`
+### Request ID
 
-Metricas customizadas:
-- payment_charge_total
-- payment_charge_duration
-- renewal_attempt_total
-- subscription_suspended_total
-- outbox_enqueued_total
-- outbox_publish_total
-- outbox_pending
-- outbox_dead
+A API utiliza `X-Request-Id`.
 
----
+Se o header não for enviado, o servidor gera um valor automaticamente e o inclui nos logs.
 
-## Perfis
-- **default**: modo assincrono desabilitado, cache simples
-- **docker** (`SPRING_PROFILES_ACTIVE=docker` no Compose): modo assincrono habilitado, Redis habilitado, RabbitMQ habilitado
+### Prometheus
 
----
-
-## Testes (Maven)
-
-| Objetivo | Comando (`cd backend`) |
-|----------|-------------------------|
-| Apenas rapido (JUnit sem tag `integration`) | `mvn test` |
-| Compilacao + testes incluindo Testcontainers | `mvn verify -P integration-tests` |
-
-Por padrao, `integration` fica **excluido** pelo Surefire: desenvolvedores sem Docker continuam rodando `mvn test` em ciclo rapido.
-
-Se `-P integration-tests` falhar com erro de cliente Docker na JVM, atualize Docker Engine/Desktop ou configure o cliente exigido pelo `docker-java` usado pelo Testcontainers; em runners Linux típicos (por exemplo Ubuntu no GitHub Actions) o comando acima deve passar quando o daemon Docker esta disponível.
-
----
-
-## Como rodar com Docker Compose
-Na raiz do repositorio:
-
-```bash
-docker compose up --build
+```text
+/actuator/prometheus
 ```
 
-O servico `app` monta backend com `SPRING_PROFILES_ACTIVE=docker`, Postgres, Redis e RabbitMQ (`5672`; interface de gerencia em `http://localhost:15672`, credenciais `guest`/`guest`).
+Catálogo de métricas:
 
-Portas liberadas tambem incluem Postgres `5432` e Redis `6379` quando precisar de clientes externos.
+```text
+/actuator/metrics
+```
 
----
+Métricas de domínio:
+
+- `payment_charge_total`
+- `payment_charge_duration`
+- `renewal_attempt_total`
+- `subscription_suspended_total`
+- `outbox_enqueued_total`
+- `outbox_publish_total`
+- `outbox_pending`
+- `outbox_dead`
+
+## Profiles
+
+### `default`
+
+- processamento assíncrono desabilitado;
+- cache simples.
+
+### `docker`
+
+- processamento assíncrono habilitado;
+- Redis habilitado;
+- RabbitMQ habilitado.
+
+## Testes
+
+| Objetivo | Comando |
+|----------|---------|
+| Unitários | `cd backend && mvn test` |
+| Integração | `cd backend && mvn verify -P integration-tests` |
+| E2E frontend | `cd frontend && npm run test:e2e` |
+
+Os testes de integração utilizam Testcontainers e exigem um daemon Docker disponível.
+
+## Operação
+
+Para promover um usuário a administrador em ambiente local:
+
+```sql
+UPDATE users
+SET role = 'ADMIN'
+WHERE email = 'seu@email';
+```
+
+Depois, faça login novamente para obter um token com o novo papel.
 
 ## Licença
 
 Licença comercial — ver [LICENSE](LICENSE) e [README-COMERCIAL.md](README-COMERCIAL.md).
-
-**Autor:** Felipe Ricarte Magalhães
