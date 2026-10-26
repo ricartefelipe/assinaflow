@@ -13,7 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -46,6 +45,9 @@ class RenewalServiceOutboxReclaimTest {
     PaymentService paymentService;
 
     @Mock
+    br.com.ricarte.assinaflow.payment.PaymentLedger ledger;
+
+    @Mock
     TimeProvider timeProvider;
 
     @Mock
@@ -73,22 +75,21 @@ class RenewalServiceOutboxReclaimTest {
 
         renewalService = new RenewalService(
                 subscriptionRepository,
-                attemptRepository,
                 paymentService,
                 new ProrationService(),
                 timeProvider,
                 subscriptionCache,
-                billingMetrics,
-                mock(br.com.ricarte.assinaflow.notification.NotificationService.class),
                 outboxRepository,
                 objectMapper,
                 transactionManager,
+                billingMetrics,
+                ledger,
                 true
         );
     }
 
     @Test
-    void shouldReclaimDeadOutboxWhenEnqueueHitsDuplicateKey() {
+    void shouldReclaimDeadOutboxWithoutDuplicateInsert() {
         Instant now = Instant.parse("2025-04-12T00:00:00Z");
         LocalDate today = LocalDate.parse("2025-04-12");
         when(timeProvider.now()).thenReturn(now);
@@ -122,10 +123,6 @@ class RenewalServiceOutboxReclaimTest {
         dead.setPublishAttempts(10);
         dead.setDeadAt(now.minusSeconds(60));
 
-        when(outboxRepository.save(any(OutboxEventEntity.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate"))
-                .thenAnswer(inv -> inv.getArgument(0));
-
         when(outboxRepository.findByIdempotencyKey(subscriptionId + "|2025-04-10|1"))
                 .thenReturn(Optional.of(dead));
 
@@ -134,7 +131,7 @@ class RenewalServiceOutboxReclaimTest {
         assertThat(processed).isEqualTo(1);
 
         ArgumentCaptor<OutboxEventEntity> captor = ArgumentCaptor.forClass(OutboxEventEntity.class);
-        verify(outboxRepository, org.mockito.Mockito.atLeast(2)).save(captor.capture());
+        verify(outboxRepository, org.mockito.Mockito.times(1)).save(captor.capture());
 
         OutboxEventEntity reclaimed = captor.getAllValues().stream()
                 .filter(e -> dead.getId().equals(e.getId()))
@@ -145,8 +142,31 @@ class RenewalServiceOutboxReclaimTest {
         assertThat(reclaimed.getPublishAttempts()).isEqualTo(0);
         assertThat(reclaimed.getDeadAt()).isNull();
         verify(billingMetrics).outboxEnqueued("PAYMENT_CHARGE_REQUESTED");
-        verify(paymentService, never()).charge(any(), anyInt());
+        verify(paymentService, never()).charge(any(), anyInt(), any(), any());
         verify(subscriptionRepository).save(s);
         assertThat(s.getRenewalInFlightUntil()).isEqualTo(now.plusSeconds(600));
     }
+    @Test
+    void directRenewalUsesDistinctKeysForEqualPricedCycles() {
+        var direct = new RenewalService(subscriptionRepository, paymentService,
+                new ProrationService(), timeProvider, subscriptionCache,
+                outboxRepository, objectMapper, transactionManager, billingMetrics, ledger, false);
+        var now = Instant.parse("2025-06-01T00:00:00Z");
+        when(timeProvider.now()).thenReturn(now);
+        when(timeProvider.todayUtc()).thenReturn(LocalDate.parse("2025-06-01"));
+        var s = new SubscriptionEntity();
+        s.setId(UUID.randomUUID());
+        s.setUserId(UUID.randomUUID());
+        s.setPlan(Plan.BASICO);
+        s.setStatus(SubscriptionStatus.ATIVA);
+        s.setAutoRenew(true);
+        s.setExpirationDate(LocalDate.parse("2025-04-10"));
+        when(subscriptionRepository.lockBatchDueForRenewal(any(), any(), eq(1))).thenReturn(List.of(s));
+        org.mockito.Mockito.doAnswer(inv -> { s.setExpirationDate(s.getExpirationDate().plusMonths(1)); return null; })
+                .when(paymentService).renew(any(), any(), any(), anyInt());
+        direct.processDueRenewals(2);
+        verify(paymentService).renew(s.getUserId(), s.getId(), LocalDate.parse("2025-04-10"), 1990);
+        verify(paymentService).renew(s.getUserId(), s.getId(), LocalDate.parse("2025-05-10"), 1990);
+    }
+
 }

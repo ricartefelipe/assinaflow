@@ -11,3 +11,8 @@ databaseChangeLog:
       file: db/changelog/changes/005-user-role.yaml
   - include:
       file: db/changelog/changes/006-totalrecall-provisioning.yaml
+  - include:
+      file: db/changelog/changes/007-payment-ledger.yaml
+  - include:
+      file: changes/008-stripe-sandbox.yaml
+      relativeToChangelogFile: true

@@ -13,14 +13,6 @@ public class LoggingNotificationSender implements NotificationSender {
 
     @Override
     public void send(NotificationMessage message) {
-        log.info(
-                "notification eventType={} to={} subject=\"{}\" body=\"{}\" subscriptionId={} attrs={}",
-                message.eventType(),
-                message.email(),
-                message.subject(),
-                message.body(),
-                message.subscriptionId(),
-                message.attributes()
-        );
+        log.info("notification eventType={} subscriptionId={}", message.eventType(), message.subscriptionId());
     }
 }

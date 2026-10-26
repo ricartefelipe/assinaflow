@@ -70,7 +70,7 @@ public class SubscriptionService {
         PaymentResult payment = paymentService.charge(
                 userId,
                 amountCents,
-                "subscribe|" + userId + "|" + req.getPlano() + "|" + start,
+                "subscribe|" + userId + "|" + req.getPlano() + "|" + start + "|" + subscriptionRepository.countByUserId(userId),
                 "Assinatura " + req.getPlano()
         );
         if (!payment.isApproved()) {
@@ -110,6 +110,7 @@ public class SubscriptionService {
                 "notification|created|" + s.getId()
         );
 
+        paymentService.markApplied(payment, s.getId());
         return toResponse(s);
     }
 
@@ -146,6 +147,7 @@ public class SubscriptionService {
 
     @Transactional
     public SubscriptionResponse cancel(UUID userId) {
+        paymentService.lockForCancellation(userId);
         SubscriptionEntity s = subscriptionRepository.findFirstByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
                 .orElseThrow(() -> new NotFoundException("SUBSCRIPTION_NOT_FOUND", "Assinatura ativa nao encontrada."));
 
@@ -165,6 +167,7 @@ public class SubscriptionService {
     @Transactional
     public SubscriptionResponse resume(UUID userId) {
         requireUser(userId);
+        paymentService.lockForCancellation(userId);
         SubscriptionEntity s = subscriptionRepository
                 .findFirstByUserIdAndStatusOrderByUpdatedAtDesc(userId, SubscriptionStatus.CANCELAMENTO_AGENDADO)
                 .orElseThrow(() -> new NotFoundException(
@@ -174,6 +177,7 @@ public class SubscriptionService {
         s.setStatus(SubscriptionStatus.ATIVA);
         s.setAutoRenew(true);
         s.setCancelRequestedAt(null);
+        paymentService.resumeCanceledRenewal(userId, s.getId(), s.getExpirationDate());
 
         s = subscriptionRepository.save(s);
         subscriptionCache.evictActive(userId);
@@ -197,7 +201,15 @@ public class SubscriptionService {
                         "Nao ha assinatura suspensa para reativar."));
 
         LocalDate today = timeProvider.todayUtc();
+        PaymentResult payment = null;
         if (!s.getExpirationDate().isAfter(today)) {
+            payment = paymentService.charge(userId,
+                    prorationService.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents()),
+                    "reactivate|" + s.getId() + "|" + s.getExpirationDate() + "|" + today, "Reativacao de assinatura");
+            if (!payment.isApproved()) {
+                throw new BadRequestException("PAYMENT_DECLINED", "Pagamento de reativacao recusado.");
+            }
+            s.setRenewalCreditCents(Math.max(0, s.getRenewalCreditCents() - s.getPlan().getPriceCents()));
             s.setStartDate(today);
             s.setExpirationDate(today.plusMonths(1));
         }
@@ -210,6 +222,7 @@ public class SubscriptionService {
         s.setSuspendedAt(null);
 
         s = subscriptionRepository.save(s);
+        if (payment != null) paymentService.markApplied(payment, s.getId());
         subscriptionCache.evictActive(userId);
         return toResponse(s);
     }
@@ -233,11 +246,13 @@ public class SubscriptionService {
                 s.getPlan(), req.getPlano(), s.getStartDate(), s.getExpirationDate(), today
         );
 
+        PaymentResult payment = null;
+        if (delta <= 0) paymentService.requireNoPending(userId);
         if (delta > 0) {
-            PaymentResult payment = paymentService.charge(
+            payment = paymentService.charge(
                     userId,
                     delta,
-                    "change-plan|" + s.getId() + "|" + req.getPlano() + "|" + today,
+                    "change-plan|" + s.getId() + "|" + req.getPlano() + "|" + today + "|" + s.getVersion(),
                     "Upgrade para " + req.getPlano()
             );
             if (!payment.isApproved()) {
@@ -252,6 +267,7 @@ public class SubscriptionService {
 
         s.setPlan(req.getPlano());
         s = subscriptionRepository.save(s);
+        if (payment != null) paymentService.markApplied(payment, s.getId());
         subscriptionCache.evictActive(userId);
 
         notificationService.enqueue(
@@ -261,7 +277,7 @@ public class SubscriptionService {
                 "Plano alterado",
                 "Sua assinatura agora e " + s.getPlan() + ".",
                 Map.of("plano", s.getPlan().name(), "deltaCentavos", String.valueOf(delta)),
-                "notification|plan-changed|" + s.getId() + "|" + s.getPlan() + "|" + today
+                "notification|plan-changed|" + s.getId() + "|" + s.getPlan() + "|" + today + "|" + s.getVersion()
         );
 
         return toResponse(s);

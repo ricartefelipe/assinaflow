@@ -1,85 +1,26 @@
-# AssinaFlow — Starter Kit de Cobrança Recorrente em Spring Boot
+# AssinaFlow — kit de demonstração de assinaturas
 
-> Base de código pronta para produção para o ciclo de cobrança recorrente: **outbox transactional, idempotência, retry determinístico e suspensão automática**. Você integra em dias, não em semanas.
->
-> Documentação técnica completa: [`README.md`](README.md).
+**Status: candidato a piloto sintético; cobrança real e oferta como motor financeiro pronto para produção não estão liberadas.** Veja [evidências e bloqueios](docs/validation/closure.md) e [manual operacional](docs/validation/operations.md).
 
----
+| Item | Oferta delimitada |
+|---|---|
+| ICP / comprador | Equipes Java/Spring que precisam avaliar um ponto de partida para assinaturas; comprador técnico responsável pela integração |
+| Usuário | Desenvolvedor, operador e assinante de demonstração |
+| Dor a verificar no piloto | Tempo gasto em gestão de ciclos, cancelamento, concorrência e entrega de eventos |
+| Incluído | Código Java 21/Spring, PostgreSQL/Liquibase, portal Vite, login próprio, planos fixos em BRL, pagamento simulado, renovação/retry/suspensão, cancelamento, outbox, obrigações/execuções persistentes, consulta/reconciliação com simulador e Stripe sandbox, cadastro hospedado, webhook autenticado e console ADMIN |
+| Excluído | Homologação externa de gateway, dinheiro real, armazenamento de cartão, invoice fiscal, refund/chargeback, trial, cobrança por uso, SSO, multi-tenancy organizacional, serviço gerenciado e garantia exactly-once |
+| Modalidade | Licença instalada conforme LICENSE; implantação assistida e suporte dependem de contrato separado |
+| Custos | Infraestrutura, operação, backup, segurança, e-mail e provedor de pagamento a cargo do contratante conforme acordo; sem preço fixado nesta documentação |
+| Limites | Uma assinatura ativa ou com cancelamento agendado por usuário; sem plano versionado ou auditoria completa de admin; reconciliação durável com simulador e contrato HTTP Stripe local; sandbox externo pendente |
+| Dependências | Java, PostgreSQL; Redis/RabbitMQ no perfil docker; Stripe definido; conta sandbox e homologação externa pendentes |
+| Suporte / atualização | Canal, horário, SLA, prazo, versões e responsabilidades a definir pelo proprietário antes da proposta |
 
-## Que problema resolve
+Onboarding: acordar escopo e licença, preparar ambiente isolado, criar dados sintéticos, executar gates, demonstrar cadastro/login → plano → renovação simulada → cancelamento → restore. Não usar clientes ou cartões reais. O piloto deve registrar falhas, tempos e requisitos que ainda não estão atendidos; não há validação de demanda ou cliente comprovada nesta entrega.
 
-Cobrança recorrente parece simples — até a primeira cobrança duplicada cair no cartão do cliente. As partes que dão errado quase nunca são o pagamento em si, e sim:
+Offboarding: exportação e retenção precisam ser contratadas e implementadas conforme necessidade do comprador; revogar acesso, entregar backup autorizado e comprovar restauração antes de encerrar operação. Não prometer portabilidade integral já disponível.
 
-- **Cobrança duplicada** quando duas instâncias rodam o job de renovação ao mesmo tempo.
-- **Evento perdido**: o pagamento foi confirmado, mas o resto do sistema não soube.
-- **Retry mal feito**: quantas vezes tentar, com qual intervalo, quando suspender.
-- **Semanas gastas no básico** em vez de entregar o produto.
+Objeções: não é um serviço de billing gerenciado nem uma instituição de pagamento. Constraints e locks protegem o banco local, mas não resolvem sozinhos sucesso remoto seguido de crash. O HTTP genérico não implementa consulta e é bloqueado no serviço financeiro; o simulador e o adapter Stripe cumprem o contrato de recuperação, com testes locais e homologação externa pendente.
 
-O AssinaFlow entrega exatamente essa camada de confiabilidade, do jeito que se coloca em produção.
+Condição de venda: o proprietário decide direitos/licença, preço, suporte e contratos. Uma licença de avaliação ou implantação delimitada não autoriza anunciar cobrança real confiável. A oferta financeira permanece NO-GO até executar a homologação Stripe sandbox e resolver as decisões de segurança e operação registradas no relatório. Persistência, recuperação, adapter Stripe e webhook estão implementados e testados localmente. Depois, executar piloto autorizado e CI sobre o commit publicado pelo proprietário. Não há aprovação jurídica, certificação, receita ou cliente declarado aqui.
 
----
-
-## O que vem no kit
-
-| # | Recurso | Descrição |
-|---|---------|-----------|
-| 1 | Renovação automática | Job diário em UTC que renova no dia certo e move o ciclo com segurança; cancelamento agendado não corta acesso antes do fim do período pago. |
-| 2 | Retry determinístico | 1ª falha em +15min, 2ª em +60min, 3ª falha suspende a assinatura e desliga a renovação; cada tentativa registrada para auditoria. |
-| 3 | Concorrência multi-instância | Row lock com `SKIP LOCKED` no PostgreSQL: nenhuma renovação é processada duas vezes, com qualquer número de instâncias. |
-| 4 | Outbox + idempotência | Eventos persistidos na mesma transação, publicados com retry e backoff, marcados como `DEAD` após o limite; consumidor idempotente por constraint única. |
-| 5 | Observabilidade | Métricas Prometheus (`payment_charge_total`, `renewal_attempt_total`, `outbox_pending`, `outbox_dead`) e logs correlacionados por `X-Request-Id`. |
-| 6 | Testado e documentado | JUnit 5, Mockito e Testcontainers; OpenAPI/Swagger; Docker Compose; README com as regras de negócio explícitas. |
-
-**Stack:** Java 21 · Spring Boot 3 · PostgreSQL 16 · Liquibase · Redis · RabbitMQ · Testcontainers · Prometheus · Docker Compose.
-
----
-
-## Para quem é
-
-- Devs sêniores e tech leads que precisam de cobrança recorrente confiável sem reinventar a roda.
-- Startups e micro-SaaS que querem controle do próprio ciclo de cobrança, não dependência total do gateway.
-- Times que precisam de uma referência sólida de outbox, idempotência e retry em Spring Boot.
-
-**Não é para:** quem busca um SaaS de billing gerenciado (aqui você tem o código, com controle total), nem para quem não pretende manter código Java/Spring.
-
----
-
-## Começando (3 passos)
-
-```bash
-docker compose up --build
-```
-
-Sobe a aplicação (perfil `docker`), PostgreSQL, Redis e RabbitMQ. Em seguida:
-
-- Swagger UI: `http://localhost:8080/swagger-ui.html`
-- Métricas: `http://localhost:8080/actuator/prometheus`
-
-Passo a passo completo, perfis, regras de banco e testes: [`README.md`](README.md).
-
----
-
-## Licença
-
-Produto comercial licenciado — **não** é open source. Resumo:
-
-- ✅ Usar, modificar e incorporar em produtos **próprios e de clientes**, sem limite de produtos finais.
-- ✅ Implantar os produtos finais em produção.
-- ❌ Revender/redistribuir o código como template, boilerplate ou produto concorrente.
-- ❌ Publicar o código-fonte como base reutilizável aberta.
-
-Termos completos em [`LICENSE`](LICENSE).
-
----
-
-## Implantação assistida (opcional)
-
-A licença é entregue "as-is" com documentação. Se quiser apoio para colocar em produção, há um pacote separado de **Implantação Assistida**: onboarding técnico, adaptação ao seu domínio e suporte a dúvidas por período definido.
-
-Contato: **felipericartem@gmail.com**
-
----
-
-## Autor
-
-**Felipe Ricarte Magalhães** — Senior Backend Engineer · Software Architect (hands-on). Mais de 17 anos em tecnologia, com foco em backend e arquitetura aplicada: APIs, integrações, mensageria, multitenancy e observabilidade em ambientes corporativos.
+Termos existentes: [LICENSE](LICENSE). Esta página não amplia nem substitui direitos contratuais.

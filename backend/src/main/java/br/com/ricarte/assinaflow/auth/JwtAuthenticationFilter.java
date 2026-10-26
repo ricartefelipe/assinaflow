@@ -18,9 +18,11 @@ import java.util.UUID;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final br.com.ricarte.assinaflow.user.UserRepository userRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, br.com.ricarte.assinaflow.user.UserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -36,7 +38,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 try {
                     Claims claims = jwtService.parse(token);
                     UUID userId = jwtService.userId(claims);
-                    String role = jwtService.role(claims);
+                    var user = userRepository.findById(userId).orElse(null);
+                    if (user == null || !user.isEnabled()
+                            || (user.getExpiresAt() != null && !user.getExpiresAt().isAfter(java.time.Instant.now()))) {
+                        throw new IllegalArgumentException("Inactive identity");
+                    }
+                    String role = user.getRole().name();
                     var auth = new UsernamePasswordAuthenticationToken(
                             userId.toString(),
                             null,

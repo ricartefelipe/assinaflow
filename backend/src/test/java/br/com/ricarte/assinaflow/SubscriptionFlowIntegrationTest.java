@@ -216,7 +216,7 @@ public class SubscriptionFlowIntegrationTest extends IntegrationTestBase {
 
     @Test
     void shouldSuspendAfterThreeFailedRenewalAttempts() throws Exception {
-        UUID userId = createUser("erin@example.com", "Erin", "ALWAYS_DECLINE", 0);
+        UUID userId = createUser("erin@example.com", "Erin", "ALWAYS_APPROVE", 0);
 
         String sub = """
                 {"plano":"BASICO","dataInicio":"2025-03-10"}
@@ -226,6 +226,11 @@ public class SubscriptionFlowIntegrationTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(sub))
                 .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/api/v1/users/{userId}/payment-profile", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"behavior\":\"ALWAYS_DECLINE\",\"failNextN\":0}"))
+                .andExpect(status().isOk());
 
         // Attempt 1
         timeProvider.setNow(Instant.parse("2025-04-10T00:00:00Z"));

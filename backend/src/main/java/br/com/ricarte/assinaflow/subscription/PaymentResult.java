@@ -1,18 +1,9 @@
 package br.com.ricarte.assinaflow.subscription;
 
-/**
- * Resultado de cobranca.
- *
- * Importante: o componente do record se chama {@code isApproved} (e nao {@code approved})
- * para evitar conflito de assinatura com o factory method {@code approved()}.
- */
-public record PaymentResult(boolean isApproved, String errorCode, String errorMessage) {
+import java.util.UUID;
 
-    public static PaymentResult approved() {
-        return new PaymentResult(true, null, null);
-    }
-
-    public static PaymentResult declined(String errorCode, String errorMessage) {
-        return new PaymentResult(false, errorCode, errorMessage);
-    }
+public record PaymentResult(boolean isApproved, String errorCode, String errorMessage, UUID obligationId, UUID owner) {
+    public PaymentResult(boolean approved, String code, String message) { this(approved, code, message, null, null); }
+    public static PaymentResult approved() { return new PaymentResult(true, null, null); }
+    public static PaymentResult declined(String code, String message) { return new PaymentResult(false, code, message); }
 }
