@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from './api/client'
+import { StripeBillingPanel } from './StripeBillingPanel'
 import { useAuth } from './auth/AuthContext'
 import { ApiError, formatPrice, planLabel, statusLabel, type Plan, type PlanInfo, type Subscription } from './types'
 
@@ -34,7 +35,7 @@ export function HomePage() {
       <section className="hero">
         <p className="eyebrow">Cobrança recorrente</p>
         <h1>AssinaFlow</h1>
-        <p>Escolha um plano, assista no seu ritmo e cancele quando quiser — sem perder o ciclo já pago.</p>
+        <p>Explore a contratação e o cancelamento de assinaturas em um ambiente de demonstração, com pagamentos simulados.</p>
         <div className="plans">
           {plans.map((plan) => (
             <article key={plan.plano} className={`plan ${plan.plano === 'PREMIUM' ? 'featured' : ''}`}>
@@ -247,6 +248,7 @@ export function ContaPage() {
 
       <section className="panel stack">
         <h2>Minha assinatura</h2>
+        <StripeBillingPanel userId={user.id} />
         {subscription === undefined && <p className="muted">Carregando status…</p>}
         {subscription === null && (
           <>
@@ -330,7 +332,8 @@ export function ContratarPage() {
       await api.createSubscription(user!.id, selected)
       navigate('/conta')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Não foi possível contratar.')
+      if (err instanceof ApiError && err.status === 503) navigate('/conta')
+      else setError(err instanceof ApiError ? err.message : 'Não foi possível contratar.')
     } finally {
       setBusy(false)
     }
@@ -344,6 +347,7 @@ export function ContratarPage() {
       </header>
       <section className="panel stack">
         <h2>Contratar plano</h2>
+        <StripeBillingPanel userId={user.id} />
         <p className="muted">Confirme o plano para ativar sua assinatura.</p>
         <div className="plans">
           {plans.map((plan) => (

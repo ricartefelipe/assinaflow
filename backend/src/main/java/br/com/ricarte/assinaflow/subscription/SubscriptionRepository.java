@@ -16,6 +16,8 @@ import java.util.UUID;
 
 public interface SubscriptionRepository extends JpaRepository<SubscriptionEntity, UUID> {
 
+    long countByUserId(UUID userId);
+
     boolean existsByUserIdAndStatusIn(UUID userId, Collection<SubscriptionStatus> statuses);
 
     Optional<SubscriptionEntity> findFirstByUserIdAndStatusIn(UUID userId, Collection<SubscriptionStatus> statuses);
@@ -34,6 +36,8 @@ public interface SubscriptionRepository extends JpaRepository<SubscriptionEntity
             WHERE status = 'ATIVA'
               AND auto_renew = true
               AND renewal_failures < 3
+              AND NOT EXISTS (SELECT 1 FROM payment_obligations p WHERE p.subscription_id=subscriptions.id
+                AND p.cycle_date=subscriptions.expiration_date AND p.status='REVIEW')
               AND expiration_date <= :today
               AND (next_renewal_attempt_at IS NULL OR next_renewal_attempt_at <= :now)
               AND (renewal_in_flight_until IS NULL OR renewal_in_flight_until <= :now)
@@ -51,6 +55,8 @@ public interface SubscriptionRepository extends JpaRepository<SubscriptionEntity
             SELECT *
             FROM subscriptions
             WHERE status = 'CANCELAMENTO_AGENDADO'
+              AND NOT EXISTS (SELECT 1 FROM payment_obligations p WHERE p.subscription_id=subscriptions.id
+                AND p.closed=false AND p.status IN ('IN_FLIGHT','UNKNOWN','APPROVED','REVIEW'))
               AND expiration_date <= :today
             ORDER BY expiration_date ASC, updated_at ASC
             LIMIT :limit

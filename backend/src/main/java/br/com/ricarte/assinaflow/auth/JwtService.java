@@ -34,6 +34,8 @@ public class JwtService {
     public String createToken(UUID userId, String email, String role) {
         Instant now = Instant.now();
         return Jwts.builder()
+                .issuer("assinaflow")
+                .audience().add("assinaflow-api").and()
                 .subject(userId.toString())
                 .claim("email", email)
                 .claim("role", role)
@@ -44,11 +46,17 @@ public class JwtService {
     }
 
     public Claims parse(String token) {
-        return Jwts.parser()
+        Claims claims = Jwts.parser()
                 .verifyWith(key)
+                .requireIssuer("assinaflow")
+                .requireAudience("assinaflow-api")
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+        if (claims.getExpiration() == null) {
+            throw new io.jsonwebtoken.MalformedJwtException("Expiration is required");
+        }
+        return claims;
     }
 
     public UUID userId(Claims claims) {

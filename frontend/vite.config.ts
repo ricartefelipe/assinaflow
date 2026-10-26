@@ -6,8 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/v3': 'http://localhost:8080',
+      '/api': process.env.E2E_API_URL || 'http://localhost:8080',
+      '/v3': process.env.E2E_API_URL || 'http://localhost:8080',
     },
   },
 })

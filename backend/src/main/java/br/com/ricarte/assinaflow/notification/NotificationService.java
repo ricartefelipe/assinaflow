@@ -58,6 +58,7 @@ public class NotificationService {
             return;
         }
 
+        if (outboxRepository.findByIdempotencyKey(idempotencyKey).isPresent()) return;
         try {
             NotificationMessage message = new NotificationMessage(
                     eventType,
@@ -79,10 +80,8 @@ public class NotificationService {
             e.setPublishAttempts(0);
             outboxRepository.save(e);
             billingMetrics.outboxEnqueued(eventType);
-        } catch (DataIntegrityViolationException dup) {
-            log.debug("notification already enqueued idempotencyKey={}", idempotencyKey);
-        } catch (Exception ex) {
-            log.warn("failed to enqueue notification eventType={} error={}", eventType, ex.toString());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+            throw new IllegalStateException("Cannot serialize notification", ex);
         }
     }
 }

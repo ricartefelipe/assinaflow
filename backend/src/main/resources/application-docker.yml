@@ -22,3 +22,8 @@ app:
       exchange: ${APP_PAYMENTS_EXCHANGE:payments.exchange}
       queue: ${APP_PAYMENTS_QUEUE:payments.charge}
       routingKey: ${APP_PAYMENTS_ROUTING_KEY:payments.charge}
+
+management:
+  health:
+    redis:
+      enabled: true

@@ -1,17 +1,14 @@
 name: CI
-
 on:
   push:
     branches: ["develop", "master", "main"]
   pull_request:
     branches: ["develop", "master", "main"]
-
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -19,5 +16,100 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Maven verify (tests com Testcontainers)
-        run: mvn -B verify -P integration-tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Patched infrastructure images
+        run: |
+          docker build -f deploy/images/postgres.Dockerfile -t assinaflow-postgres:16-patched deploy/images
+          docker build -f deploy/images/redis.Dockerfile -t assinaflow-redis:7-patched deploy/images
+          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:3-patched deploy/images
+      - name: Backend, financial recovery, authorization and migration
+        working-directory: backend
+        run: mvn -B clean verify -P integration-tests -Dtest.rabbitmq.image=assinaflow-rabbitmq:3-patched -Dtest.postgres.image=assinaflow-postgres:16-patched
+      - name: Frontend installation, build, lint and audit
+        working-directory: frontend
+        run: |
+          npm install --global npm@12.2.1 --ignore-scripts
+          node patch-npm-undici.cjs
+          npm ci --ignore-scripts
+          npm run build
+          npm run lint
+          npm audit --omit=dev
+          npm audit
+          npx playwright install --with-deps chromium
+      - name: Integrated journey, browser without retries, restart and restore
+        env:
+          TEST_POSTGRES_IMAGE: assinaflow-postgres:16-patched
+        run: python3 -u scripts/verify-isolated.py --frontend
+      - name: Full isolated runtime stack and browser
+        run: |
+          docker build -t assinaflow-validation-stripe-backend:local backend
+          docker build -t assinaflow-validation-stripe-frontend:local frontend
+          python3 -u scripts/verify-stack.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-results
+          path: |
+            backend/target/surefire-reports/
+            frontend/test-results/
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Complete runtime and test dependency SBOMs
+        working-directory: backend
+        run: |
+          mvn -B org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DincludeTestScope=false -DoutputName=bom-runtime
+          mvn -B org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DincludeTestScope=true -DoutputName=bom-all
+      - name: Audit Maven runtime and development
+        run: |
+          mkdir -p "$RUNNER_TEMP/trivy-cache"
+          status=0
+          for scope in runtime all; do
+            docker run --rm -v "$PWD:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1 sbom --scanners vuln --timeout 20m --format json --output "/scan/backend/target/audit-$scope.json" "/scan/backend/target/bom-$scope.json" || status=1
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(any(v["Severity"] in ("HIGH","CRITICAL") for r in d.get("Results",[]) for v in r.get("Vulnerabilities",[])))' "backend/target/audit-$scope.json" || status=1
+          done
+          exit "$status"
+      - name: Build actual runtime and build stages
+        if: always()
+        run: |
+          docker build -t assinaflow-security-backend backend
+          docker build --target build -t assinaflow-security-backend-build backend
+          docker build -t assinaflow-security-frontend frontend
+          docker build --target build -t assinaflow-security-frontend-build frontend
+          docker build -f deploy/images/postgres.Dockerfile -t assinaflow-postgres:16-patched deploy/images
+          docker build -f deploy/images/postgres.Dockerfile --target gosu-build -t assinaflow-security-gosu-build deploy/images
+          docker build -f deploy/images/redis.Dockerfile -t assinaflow-redis:7-patched deploy/images
+          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:3-patched deploy/images
+      - name: Audit runtime and build images independently
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/security-images" "$RUNNER_TEMP/trivy-cache"
+          status=0
+          i=0
+          for image in assinaflow-security-backend assinaflow-security-frontend assinaflow-postgres:16-patched assinaflow-redis:7-patched assinaflow-rabbitmq:3-patched assinaflow-security-backend-build assinaflow-security-frontend-build assinaflow-security-gosu-build; do
+            i=$((i+1))
+            if ! docker image inspect "$image" >/dev/null 2>&1; then docker pull "$image" || status=1; fi
+            docker save -o "$RUNNER_TEMP/security-images/image-$i.tar" "$image" || status=1
+            docker run --rm -v "$RUNNER_TEMP/security-images:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1 image --scanners vuln --timeout 20m --input "/scan/image-$i.tar" --format json --output "/scan/image-$i.json" || status=1
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(any(v["Severity"] in ("HIGH","CRITICAL") for r in d.get("Results",[]) for v in r.get("Vulnerabilities",[])))' "$RUNNER_TEMP/security-images/image-$i.json" || status=1
+            rm -f "$RUNNER_TEMP/security-images/image-$i.tar"
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-and-container-audits
+          path: |
+            backend/target/bom-*.json
+            backend/target/audit-*.json
+            ${{ runner.temp }}/security-images/*.json

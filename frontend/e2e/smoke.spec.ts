@@ -10,7 +10,7 @@ test.describe('subscriber smoke', () => {
     } catch {
       apiUp = false
     }
-    test.skip(!apiUp, `API indisponivel em ${api}`)
+    expect(apiUp, `API indisponivel em ${api}`).toBeTruthy()
 
     const email = `e2e.${Date.now()}@example.com`
     const senha = 'senha12345'

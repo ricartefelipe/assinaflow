@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: assinaflow-postgres:16-patched
+    build:
+      context: ./deploy/images
+      dockerfile: postgres.Dockerfile
     environment:
       POSTGRES_DB: subscriptions
       POSTGRES_USER: subscriptions
@@ -16,7 +19,10 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   redis:
-    image: redis:7-alpine
+    image: assinaflow-redis:7-patched
+    build:
+      context: ./deploy/images
+      dockerfile: redis.Dockerfile
     ports:
       - "6379:6379"
     healthcheck:
@@ -26,7 +32,10 @@ services:
       retries: 20
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: assinaflow-rabbitmq:3-patched
+    build:
+      context: ./deploy/images
+      dockerfile: rabbitmq.Dockerfile
     ports:
       - "5672:5672"
       - "15672:15672"
