@@ -9,7 +9,8 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.30.6-alpine
-RUN apk upgrade --no-cache brotli-libs
+RUN apk upgrade --no-cache brotli-libs \
+    && apk add --no-cache 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
