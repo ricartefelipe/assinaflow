@@ -53,6 +53,12 @@ async function request<T>(path: string, init: RequestInit = {}, auth = false): P
 }
 
 export const api = {
+  billingConfig: () => request<{gateway: string; publishableKey?: string}>('/api/v1/billing/config'),
+  billingSetup: (user: string) => request<{url: string}>(`/api/v1/users/${user}/billing/setup`, {method: 'POST'}, true),
+  billingStatus: (user: string) => request<{ready: boolean}>(`/api/v1/users/${user}/billing/status`, {}, true),
+  payments: (user: string) => request<{id: string; status: string; settled: boolean}[]>(`/api/v1/users/${user}/payments`, {}, true),
+  stripeAction: (user: string, id: string) => request<{status: string; clientSecret?: string; paymentMethod?: string}>(`/api/v1/users/${user}/payments/${id}/stripe/action`, {method: 'POST'}, true),
+  stripeReconcile: (user: string, id: string) => request<void>(`/api/v1/users/${user}/payments/${id}/stripe/reconcile`, {method: 'POST'}, true),
   listPlans(): Promise<PlanInfo[]> {
     return request<PlanInfo[]>('/api/v1/plans') as Promise<PlanInfo[]>
   },

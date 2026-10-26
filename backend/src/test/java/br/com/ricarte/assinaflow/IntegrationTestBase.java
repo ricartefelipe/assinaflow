@@ -2,7 +2,7 @@ package br.com.ricarte.assinaflow;
 
 import br.com.ricarte.assinaflow.testutil.TestTimeProviderConfig;
 import org.junit.jupiter.api.Tag;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -24,7 +24,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public abstract class IntegrationTestBase {
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(org.testcontainers.utility.DockerImageName.parse(
+                    System.getProperty("test.postgres.image", "postgres:16-alpine")).asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("subscriptions")
             .withUsername("subscriptions")
             .withPassword("subscriptions");

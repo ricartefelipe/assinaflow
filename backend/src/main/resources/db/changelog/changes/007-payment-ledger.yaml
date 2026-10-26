@@ -1,0 +1,61 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-payment-ledger
+      author: billing
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              CREATE TABLE payment_obligations (
+                id uuid PRIMARY KEY, business_key varchar(200) NOT NULL UNIQUE,
+                user_id uuid NOT NULL REFERENCES users(id), subscription_id uuid REFERENCES subscriptions(id),
+                amount_cents integer NOT NULL CHECK (amount_cents >= 0), currency varchar(3) NOT NULL CHECK (currency = 'BRL'),
+                idempotency_key varchar(200) NOT NULL UNIQUE, context jsonb NOT NULL,
+                kind varchar(20) NOT NULL CHECK (kind IN ('SUBSCRIBE','RENEWAL','REACTIVATE','CHANGE_PLAN')), cycle_date date,
+                CHECK (kind = context->>'kind'),
+                CHECK (cycle_date IS NOT DISTINCT FROM (context->>'cycle')::date),
+                CHECK (kind <> 'RENEWAL' OR (cycle_date IS NOT NULL AND subscription_id IS NOT NULL)),
+                status varchar(20) NOT NULL CHECK (status IN ('PREPARED','IN_FLIGHT','UNKNOWN','APPROVED','DECLINED','REVIEW','CANCELED')),
+                provider_reference varchar(200), closed boolean NOT NULL DEFAULT false,
+                settled boolean NOT NULL DEFAULT false, failure_count integer NOT NULL DEFAULT 0,
+                execution_count integer NOT NULL DEFAULT 0, lookup_count integer NOT NULL DEFAULT 0,
+                owner uuid, lease_until timestamptz, next_attempt_at timestamptz NOT NULL DEFAULT now(),
+                created_at timestamptz NOT NULL DEFAULT now(), retention_until timestamptz NOT NULL,
+                updated_at timestamptz NOT NULL DEFAULT now(), review_reason varchar(100)
+              );
+              CREATE UNIQUE INDEX uq_payment_cycle ON payment_obligations(subscription_id,cycle_date) WHERE kind='RENEWAL';
+              CREATE UNIQUE INDEX uq_payment_open_user ON payment_obligations(user_id) WHERE closed = false;
+              CREATE INDEX idx_payment_recovery ON payment_obligations(next_attempt_at, lease_until) WHERE closed = false;
+              CREATE TABLE payment_executions (
+                id uuid PRIMARY KEY, obligation_id uuid NOT NULL REFERENCES payment_obligations(id),
+                sequence integer NOT NULL, operation varchar(10) NOT NULL CHECK (operation IN ('CHARGE','QUERY','APPLY')),
+                owner uuid NOT NULL, result varchar(20) NOT NULL DEFAULT 'PENDING',
+                started_at timestamptz NOT NULL, finished_at timestamptz,
+                UNIQUE(obligation_id, sequence)
+              );
+              CREATE TABLE simulated_provider_payments (
+                idempotency_key varchar(200) PRIMARY KEY, provider_reference varchar(200) NOT NULL UNIQUE,
+                obligation_id uuid NOT NULL UNIQUE, user_id uuid NOT NULL,
+                amount_cents integer NOT NULL, currency varchar(3) NOT NULL,
+                status varchar(20) NOT NULL, effects integer NOT NULL DEFAULT 0 CHECK (effects BETWEEN 0 AND 1),
+                created_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE FUNCTION protect_payment_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN
+                IF (NEW.business_key, NEW.user_id, NEW.amount_cents, NEW.currency, NEW.idempotency_key, NEW.context, NEW.retention_until, NEW.kind, NEW.cycle_date)
+                   IS DISTINCT FROM
+                   (OLD.business_key, OLD.user_id, OLD.amount_cents, OLD.currency, OLD.idempotency_key, OLD.context, OLD.retention_until, OLD.kind, OLD.cycle_date) THEN
+                  RAISE EXCEPTION 'payment identity is immutable';
+                END IF;
+                IF OLD.subscription_id IS NOT NULL AND NEW.subscription_id IS DISTINCT FROM OLD.subscription_id THEN
+                  RAISE EXCEPTION 'subscription correlation is immutable';
+                END IF;
+                IF OLD.closed AND (NEW.status IS DISTINCT FROM OLD.status OR NOT NEW.settled OR NOT NEW.closed)
+                  AND NOT (OLD.status='DECLINED' AND OLD.kind<>'RENEWAL' AND NEW.status='DECLINED' AND NEW.settled)
+                  AND NOT (OLD.status='CANCELED' AND OLD.kind='RENEWAL' AND NEW.status='PREPARED' AND NOT NEW.closed AND NOT NEW.settled) THEN
+                  RAISE EXCEPTION 'closed payment cannot regress without explicit reauthorization';
+                END IF;
+                RETURN NEW;
+              END $$;
+              CREATE TRIGGER payment_identity_immutable BEFORE UPDATE ON payment_obligations
+                FOR EACH ROW EXECUTE FUNCTION protect_payment_identity();

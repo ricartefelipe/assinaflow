@@ -30,6 +30,7 @@ public class HttpPaymentGateway implements PaymentGateway {
         try {
             HttpChargeResponse body = restClient.post()
                     .uri(chargeUrl)
+                    .header("Idempotency-Key", command.idempotencyKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
                             "userId", command.userId().toString(),
@@ -40,8 +41,8 @@ public class HttpPaymentGateway implements PaymentGateway {
                     .retrieve()
                     .body(HttpChargeResponse.class);
 
-            if (body == null) {
-                return PaymentResult.declined("PAYMENT_GATEWAY_ERROR", "Resposta vazia do gateway HTTP.");
+            if (body == null || body.approved() == null) {
+                throw new PaymentOutcomeUnknownException();
             }
             if (body.approved()) {
                 return PaymentResult.approved();
@@ -50,10 +51,10 @@ public class HttpPaymentGateway implements PaymentGateway {
             String message = body.errorMessage() != null ? body.errorMessage() : "Pagamento recusado pelo gateway HTTP.";
             return PaymentResult.declined(code, message);
         } catch (RestClientException ex) {
-            return PaymentResult.declined("PAYMENT_GATEWAY_ERROR", "Falha ao chamar gateway HTTP: " + ex.getMessage());
+            throw new PaymentOutcomeUnknownException();
         }
     }
 
-    public record HttpChargeResponse(boolean approved, String errorCode, String errorMessage) {
+    public record HttpChargeResponse(Boolean approved, String errorCode, String errorMessage) {
     }
 }

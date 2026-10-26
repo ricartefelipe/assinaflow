@@ -3,7 +3,7 @@
 [![CI](https://github.com/ricartefelipe/assinaflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ricartefelipe/assinaflow/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Commercial-red.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3-FF6600?logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com/)
@@ -11,7 +11,10 @@
 
 Sistema de gestão de assinaturas recorrentes com foco em confiabilidade operacional.
 
-O AssinaFlow trata renovação automática, cancelamento ao fim do ciclo, retry de cobrança, concorrência entre instâncias, idempotência e processamento assíncrono com outbox. A proposta é evitar os problemas clássicos desse tipo de domínio: cobrança duplicada, renovação concorrente, perda de evento e inconsistência entre assinatura e pagamento.
+**Estado da entrega:** demonstração e adapter Stripe sandbox integrado; homologação externa pendente, cobrança real bloqueada.
+Leia a [matriz de fechamento](docs/validation/closure.md), o [manual operacional](docs/validation/operations.md) e a [oferta delimitada](README-COMERCIAL.md).
+
+O projeto implementa ciclos, cancelamento, retry e outbox. Locks e constraints protegem estado local; não comprovam ausência de cobrança duplicada após sucesso remoto seguido de falha local. Há ledger e reconciliação duráveis, simulador explícito e adapter Stripe sandbox conectado à jornada. Contratos HTTP locais foram testados; homologação externa depende das credenciais de teste.
 
 ## Visão geral
 
@@ -22,23 +25,23 @@ O AssinaFlow trata renovação automática, cancelamento ao fim do ciclo, retry 
 | **Renovação** | Job em UTC com recuperação de atrasos |
 | **Retry** | Tentativas determinísticas antes da suspensão |
 | **Concorrência** | Row lock + `SKIP LOCKED` |
-| **Idempotência** | Constraint única no consumidor |
+| **Idempotência** | Obrigação por ciclo, chave estável, lease e reconciliação durável; Stripe sandbox integrado; homologação externa pendente |
 | **Mensageria** | RabbitMQ + outbox |
 | **Cache** | Redis |
-| **Observabilidade** | Request ID, logs e métricas Prometheus |
+| **Observabilidade** | Request ID, logs e métricas Actuator |
 
 ## Stack
 
 | Camada | Tecnologia |
 |--------|------------|
-| Backend | Java 21, Spring Boot 3.x |
+| Backend | Java 21, Spring Boot 4.0.9 / Spring 7.0.10 |
 | Dados | PostgreSQL 16+, JPA/Hibernate, Liquibase |
 | Cache | Redis |
 | Mensageria | RabbitMQ |
 | API | REST, OpenAPI, Swagger |
 | Testes | JUnit 5, Mockito, Testcontainers |
-| Operação | Docker Compose, Actuator, Micrometer, Prometheus |
-| Frontend | Vite / Node.js 20+ |
+| Operação | Docker Compose, Actuator, Micrometer |
+| Frontend | Vite / Node.js 24 validado |
 
 Base package:
 
@@ -103,7 +106,7 @@ Com duas ou mais instâncias:
 
 1. uma instância bloqueia a assinatura;
 2. as demais ignoram a linha bloqueada;
-3. a renovação não é executada em duplicidade.
+3. a linha não é processada simultaneamente pelo outro scheduler; isso não substitui idempotência externa e reconciliação.
 
 No fluxo assíncrono:
 
@@ -123,7 +126,7 @@ Consumer idempotente
 PostgreSQL
 ```
 
-A idempotência também é garantida por constraint única em:
+O registro local de tentativa é protegido por constraint única em:
 
 ```text
 (subscription_id, cycle_expiration_date, attempt_number)
@@ -167,7 +170,6 @@ mvn verify -P integration-tests
 
 ### Usuários
 
-- `POST /api/v1/users`
 - `GET /api/v1/users/{userId}`
 - `PUT /api/v1/users/{userId}/payment-profile`
 
@@ -185,9 +187,16 @@ mvn verify -P integration-tests
 - `POST /api/v1/users/{userId}/subscriptions/reactivate`
 - `POST /api/v1/users/{userId}/subscriptions/change-plan`
 
-O endpoint de alteração de plano trata proration no upgrade e crédito no downgrade.
+O endpoint de alteração de plano calcula proporção no upgrade e crédito no downgrade. Política, limites e fluxos ainda não suportados estão no manual operacional; não constitui faturamento financeiro homologado.
+
+### Cobranças do titular
+
+- `GET /api/v1/users/{userId}/payments`
+- `GET /api/v1/users/{userId}/payments/{paymentId}`
 
 ### Administração
+
+- `GET /api/v1/admin/payments/review` — fila de resultados inconclusivos, somente ADMIN.
 
 - `GET /api/v1/admin/users`
 - `GET /api/v1/admin/subscriptions`
@@ -201,7 +210,7 @@ Com a API disponível em `http://localhost:8080`:
 
 ```bash
 cd frontend
-npm install
+npm ci --ignore-scripts
 npm run dev
 ```
 
@@ -216,21 +225,17 @@ Rotas principais:
 
 A UI usa proxy de `/api` para o backend.
 
-## Demo pública
+## Demonstração isolada
 
-- UI: `http://54.94.163.136:9084/`
-- Swagger: `http://54.94.163.136:8080/swagger-ui/index.html`
+Não há credencial pública necessária ao teste. Após `mvn verify -P integration-tests`, execute na raiz:
 
-Credenciais de demonstração:
-
-```text
-demo@assinaflow.test
-demo12345
+```bash
+python3 scripts/verify-isolated.py
+# Com Chromium da versão Playwright instalada:
+python3 scripts/verify-isolated.py --frontend
 ```
 
-Papel: `ADMIN`.
-
-O login é nativo por e-mail e senha. As credenciais de demonstração são provisionadas no próprio AssinaFlow.
+O script cria PostgreSQL descartável, executa cadastro/login e autorização, recupera obrigação incerta após reinício da JVM com consulta ao simulador, restaura backup em banco vazio e lê assinatura e pagamento pela API reiniciada. Não usa ambiente existente. O browser roda sem retries e o pagamento é simulado.
 
 ## Fluxo funcional
 
@@ -255,6 +260,7 @@ O gateway `simulated` permite controlar o resultado do pagamento pelo payment pr
 
 Variáveis principais:
 
+- `APP_BILLING_MODE`
 - `JWT_SECRET`
 - `APP_CORS_ORIGINS`
 - `APP_PAYMENTS_GATEWAY`
@@ -265,7 +271,9 @@ Variáveis principais:
 - `spring.mail.port`
 - `APP_SECURITY_ENABLED`
 
-`APP_PAYMENTS_GATEWAY` aceita `simulated` ou `http`.
+`APP_BILLING_MODE=demo` exige `APP_PAYMENTS_GATEWAY=simulated` (padrão).
+`APP_BILLING_MODE=sandbox` com `APP_PAYMENTS_GATEWAY=stripe` exige autenticação, JWT dedicado, STRIPE_SECRET_KEY de teste, STRIPE_PUBLISHABLE_KEY e STRIPE_WEBHOOK_SECRET. Cadastro do cartão ocorre no Checkout hospedado, e autenticação adicional no componente Stripe.js.
+`production` é rejeitado enquanto não houver homologação. O HTTP genérico não tem contrato de consulta e é rejeitado na inicialização do serviço financeiro. O simulador e o adapter Stripe implementam submit/lookup e recuperação durável; webhooks Stripe são autenticados e deduplicados persistentemente. Timeouts e resultados inconclusivos são persistidos para consulta/revisão, sem nova chave nem recusa presumida. Não apontar o transporte antigo a cobranças reais.
 
 `APP_NOTIFICATIONS_SENDER` aceita `logging` ou `smtp`.
 
@@ -278,6 +286,9 @@ Principais tabelas:
 - `subscriptions`
 - `subscription_renewal_attempts`
 - `outbox_events`
+- `payment_obligations`
+- `payment_executions`
+- `simulated_provider_payments`
 
 Regras importantes no banco:
 
@@ -292,17 +303,9 @@ A API utiliza `X-Request-Id`.
 
 Se o header não for enviado, o servidor gera um valor automaticamente e o inclui nos logs.
 
-### Prometheus
+### Métricas
 
-```text
-/actuator/prometheus
-```
-
-Catálogo de métricas:
-
-```text
-/actuator/metrics
-```
+Catálogo: `/actuator/metrics`. A dependência do registry Prometheus não está presente; não anunciar `/actuator/prometheus` funcional nesta distribuição.
 
 Métricas de domínio:
 
@@ -339,6 +342,11 @@ Métricas de domínio:
 Os testes de integração utilizam Testcontainers e exigem um daemon Docker disponível.
 
 ## Operação
+
+JWT exige issuer/audience e assinatura; tokens antigos exigem novo login. Usuários desabilitados/expirados e papéis removidos têm efeito na próxima requisição. Não há refresh token nem logout com revogação individual. As rotas `/users/{id}` são exclusivas do titular; ADMIN atua em `/admin`, sem bypass de ownership. Auditoria administrativa completa permanece pendente.
+
+Backup/restore, atualização, incidentes e homologação: [manual operacional](docs/validation/operations.md). Docker Compose é demonstração com defaults locais, não configuração de produção.
+
 
 Para promover um usuário a administrador em ambiente local:
 

@@ -1,309 +1,97 @@
 package br.com.ricarte.assinaflow.subscription;
 
 import br.com.ricarte.assinaflow.common.time.TimeProvider;
-import br.com.ricarte.assinaflow.metrics.BillingMetrics;
-import br.com.ricarte.assinaflow.notification.NotificationService;
-import br.com.ricarte.assinaflow.outbox.OutboxEventEntity;
-import br.com.ricarte.assinaflow.outbox.OutboxRepository;
-import br.com.ricarte.assinaflow.outbox.OutboxStatus;
+import br.com.ricarte.assinaflow.outbox.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class RenewalService {
+    private final br.com.ricarte.assinaflow.metrics.BillingMetrics metrics;
+    private final SubscriptionRepository subscriptions;
+    private final br.com.ricarte.assinaflow.payment.PaymentLedger ledger;
+    private final PaymentService payments;
+    private final ProrationService proration;
+    private final TimeProvider time;
+    private final SubscriptionCache cache;
+    private final OutboxRepository outbox;
+    private final ObjectMapper mapper;
+    private final boolean async;
+    private final TransactionTemplate tx;
 
-    private static final Logger log = LoggerFactory.getLogger(RenewalService.class);
-
-    private final SubscriptionRepository subscriptionRepository;
-    private final SubscriptionRenewalAttemptRepository attemptRepository;
-    private final PaymentService paymentService;
-    private final ProrationService prorationService;
-    private final TimeProvider timeProvider;
-    private final SubscriptionCache subscriptionCache;
-    private final BillingMetrics billingMetrics;
-    private final NotificationService notificationService;
-
-    private final OutboxRepository outboxRepository;
-    private final ObjectMapper objectMapper;
-
-    private final boolean asyncEnabled;
-
-    private final TransactionTemplate requiresNewTx;
-
-    public RenewalService(
-            SubscriptionRepository subscriptionRepository,
-            SubscriptionRenewalAttemptRepository attemptRepository,
-            PaymentService paymentService,
-            ProrationService prorationService,
-            TimeProvider timeProvider,
-            SubscriptionCache subscriptionCache,
-            BillingMetrics billingMetrics,
-            NotificationService notificationService,
-            OutboxRepository outboxRepository,
-            ObjectMapper objectMapper,
-            PlatformTransactionManager transactionManager,
-            @Value("${app.payments.async.enabled:false}") boolean asyncEnabled
-    ) {
-        this.subscriptionRepository = subscriptionRepository;
-        this.attemptRepository = attemptRepository;
-        this.paymentService = paymentService;
-        this.prorationService = prorationService;
-        this.timeProvider = timeProvider;
-        this.subscriptionCache = subscriptionCache;
-        this.billingMetrics = billingMetrics;
-        this.notificationService = notificationService;
-        this.outboxRepository = outboxRepository;
-        this.objectMapper = objectMapper;
-        this.asyncEnabled = asyncEnabled;
-
-        this.requiresNewTx = new TransactionTemplate(transactionManager);
-        this.requiresNewTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    public RenewalService(SubscriptionRepository subscriptions, PaymentService payments, ProrationService proration,
+                          TimeProvider time, SubscriptionCache cache, OutboxRepository outbox, ObjectMapper mapper,
+                          PlatformTransactionManager manager, br.com.ricarte.assinaflow.metrics.BillingMetrics metrics, br.com.ricarte.assinaflow.payment.PaymentLedger ledger, @Value("${app.payments.async.enabled:false}") boolean async) {
+        this.subscriptions = subscriptions; this.payments = payments; this.proration = proration; this.time = time;
+        this.cache = cache; this.metrics = metrics; this.ledger = ledger; this.outbox = outbox; this.mapper = mapper; this.async = async;
+        tx = new TransactionTemplate(manager); tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /**
-     * Processes up to max items.
-     * - Direct mode: charges synchronously and updates subscription.
-     * - Async mode: enqueues an outbox event and marks in-flight.
-     */
+    private record Due(UUID id, UUID user, LocalDate cycle, int amount) { }
+
     public int processDueRenewals(int max) {
         int processed = 0;
         for (int i = 0; i < max; i++) {
-            Boolean didProcess = requiresNewTx.execute(status -> processOneRenewal());
-            if (Boolean.FALSE.equals(didProcess)) {
-                break;
-            }
+            Due due = tx.execute(status -> {
+                var batch = subscriptions.lockBatchDueForRenewal(time.todayUtc(), time.now(), 1);
+                if (batch.isEmpty()) return null;
+                var s = batch.getFirst();
+                var item = new Due(s.getId(), s.getUserId(), s.getExpirationDate(), proration.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents()));
+                ledger.reserveRenewal(s, item.amount());
+                if (async) enqueue(s, item);
+                s.setRenewalInFlightUntil(time.now().plus(Duration.ofMinutes(10)));
+                subscriptions.save(s);
+                return item;
+            });
+            if (due == null) break;
+            // The reservation transaction is committed before reaching the provider.
+            if (!async) payments.renew(due.user(), due.id(), due.cycle(), due.amount());
             processed++;
         }
         return processed;
     }
 
-    /**
-     * Finalizes scheduled cancellations after expiration.
-     */
+    private void enqueue(SubscriptionEntity s, Due due) {
+        String key = s.getId() + "|" + s.getExpirationDate() + "|" + (s.getRenewalFailures() + 1);
+        var existing = outbox.findByIdempotencyKey(key);
+        if (existing.isPresent()) {
+            var event = existing.get();
+            // Redelivery is safe; financial recovery is owned by the durable obligation, not the outbox row.
+            event.setStatus(OutboxStatus.PENDING); event.setPublishAttempts(0); event.setNextAttemptAt(time.now());
+            event.setDeadAt(null); event.setLastError(null); event.setSentAt(null); outbox.save(event);
+            metrics.outboxEnqueued(event.getEventType());
+            return;
+        }
+        var event = new OutboxEventEntity();
+        event.setAggregateType("SUBSCRIPTION"); event.setAggregateId(s.getId()); event.setEventType("PAYMENT_CHARGE_REQUESTED");
+        event.setIdempotencyKey(key); event.setStatus(OutboxStatus.PENDING); event.setPublishAttempts(0);
+        try {
+            event.setPayload(mapper.writeValueAsString(new PaymentChargeRequested(null, s.getId(), s.getUserId(), due.cycle(),
+                    s.getRenewalFailures() + 1, due.amount(), time.now())));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException(ex); }
+        outbox.save(event);
+        metrics.outboxEnqueued(event.getEventType());
+    }
+
     public int finalizeScheduledCancellations(int max) {
         int processed = 0;
         for (int i = 0; i < max; i++) {
-            Boolean did = requiresNewTx.execute(status -> processOneFinalization());
-            if (Boolean.FALSE.equals(did)) {
-                break;
-            }
+            Boolean did = tx.execute(status -> {
+                var batch = subscriptions.lockBatchDueForFinalization(time.todayUtc(), 1);
+                if (batch.isEmpty()) return false;
+                var s = batch.getFirst(); s.setStatus(SubscriptionStatus.CANCELADA); s.setAutoRenew(false);
+                subscriptions.save(s); cache.evictActive(s.getUserId()); return true;
+            });
+            if (!Boolean.TRUE.equals(did)) break;
             processed++;
         }
         return processed;
-    }
-
-    private boolean processOneRenewal() {
-        Instant now = timeProvider.now();
-        LocalDate today = timeProvider.todayUtc();
-
-        List<SubscriptionEntity> batch = subscriptionRepository.lockBatchDueForRenewal(today, now, 1);
-        if (batch.isEmpty()) {
-            return false;
-        }
-
-        SubscriptionEntity s = batch.get(0);
-        if (asyncEnabled) {
-            enqueuePaymentCharge(s, now);
-        } else {
-            processLockedSubscriptionDirect(s, now);
-        }
-        return true;
-    }
-
-    private boolean processOneFinalization() {
-        LocalDate today = timeProvider.todayUtc();
-        List<SubscriptionEntity> batch = subscriptionRepository.lockBatchDueForFinalization(today, 1);
-        if (batch.isEmpty()) {
-            return false;
-        }
-
-        SubscriptionEntity s = batch.get(0);
-        s.setStatus(SubscriptionStatus.CANCELADA);
-        s.setAutoRenew(false);
-        subscriptionRepository.save(s);
-        subscriptionCache.evictActive(s.getUserId());
-
-        log.info("finalized cancellation subscriptionId={} userId={}", s.getId(), s.getUserId());
-        return true;
-    }
-
-    private void enqueuePaymentCharge(SubscriptionEntity s, Instant now) {
-        // Defensive: should already be filtered by query
-        if (s.getStatus() != SubscriptionStatus.ATIVA || !s.isAutoRenew()) {
-            return;
-        }
-
-        int attemptNumber = s.getRenewalFailures() + 1;
-        int amountCents = prorationService.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents());
-        LocalDate cycleExpiration = s.getExpirationDate();
-
-        String idempotencyKey = s.getId() + "|" + cycleExpiration + "|" + attemptNumber;
-
-        try {
-            PaymentChargeRequested msg = new PaymentChargeRequested(
-                    null,
-                    s.getId(),
-                    s.getUserId(),
-                    cycleExpiration,
-                    attemptNumber,
-                    amountCents,
-                    now
-            );
-
-            String payload = objectMapper.writeValueAsString(msg);
-
-            OutboxEventEntity e = new OutboxEventEntity();
-            e.setAggregateType("SUBSCRIPTION");
-            e.setAggregateId(s.getId());
-            e.setEventType("PAYMENT_CHARGE_REQUESTED");
-            e.setIdempotencyKey(idempotencyKey);
-            e.setPayload(payload);
-            e.setStatus(OutboxStatus.PENDING);
-            e.setPublishAttempts(0);
-
-            outboxRepository.save(e);
-            billingMetrics.outboxEnqueued(e.getEventType());
-
-            s.setRenewalInFlightUntil(now.plus(Duration.ofMinutes(10)));
-            subscriptionRepository.save(s);
-
-            log.info("enqueued payment charge subscriptionId={} userId={} attempt={}", s.getId(), s.getUserId(), attemptNumber);
-        } catch (DataIntegrityViolationException dup) {
-            reclaimDeadOutboxIfNeeded(idempotencyKey, now);
-            s.setRenewalInFlightUntil(now.plus(Duration.ofMinutes(10)));
-            subscriptionRepository.save(s);
-        } catch (Exception ex) {
-            log.warn("failed to enqueue outbox subscriptionId={} error={}", s.getId(), ex.toString());
-        }
-    }
-
-    private void reclaimDeadOutboxIfNeeded(String idempotencyKey, Instant now) {
-        outboxRepository.findByIdempotencyKey(idempotencyKey).ifPresent(existing -> {
-            if (existing.getStatus() != OutboxStatus.DEAD) {
-                return;
-            }
-            existing.setStatus(OutboxStatus.PENDING);
-            existing.setPublishAttempts(0);
-            existing.setNextAttemptAt(now);
-            existing.setDeadAt(null);
-            existing.setLastError(null);
-            existing.setSentAt(null);
-            outboxRepository.save(existing);
-            billingMetrics.outboxEnqueued(existing.getEventType());
-            log.warn("reclaimed DEAD outbox eventId={} idempotencyKey={}", existing.getId(), idempotencyKey);
-        });
-    }
-
-    private void processLockedSubscriptionDirect(SubscriptionEntity s, Instant now) {
-        if (s.getStatus() != SubscriptionStatus.ATIVA || !s.isAutoRenew()) {
-            return;
-        }
-
-        int attemptNumber = s.getRenewalFailures() + 1;
-        int amountCents = prorationService.renewalAmountCents(s.getPlan(), s.getRenewalCreditCents());
-        LocalDate cycleExpiration = s.getExpirationDate();
-
-        PaymentResult payment = paymentService.charge(s.getUserId(), amountCents);
-
-        SubscriptionRenewalAttemptEntity attempt = new SubscriptionRenewalAttemptEntity();
-        attempt.setSubscriptionId(s.getId());
-        attempt.setCycleExpirationDate(cycleExpiration);
-        attempt.setAttemptNumber(attemptNumber);
-        attempt.setAttemptedAt(now);
-        attempt.setAmountCents(amountCents);
-
-        if (payment.isApproved()) {
-            attempt.setResult(RenewalAttemptResult.SUCCESS);
-            attemptRepository.save(attempt);
-            billingMetrics.renewalAttempt(true, "sync");
-
-            s.setStartDate(cycleExpiration);
-            s.setExpirationDate(cycleExpiration.plusMonths(1));
-            s.setRenewalFailures(0);
-            s.setRenewalCreditCents(0);
-            s.setNextRenewalAttemptAt(null);
-            s.setStatus(SubscriptionStatus.ATIVA);
-            s.setRenewalInFlightUntil(null);
-
-            subscriptionRepository.save(s);
-            subscriptionCache.evictActive(s.getUserId());
-
-            notificationService.enqueue(
-                    NotificationService.RENEWAL_SUCCEEDED,
-                    s.getUserId(),
-                    s.getId(),
-                    "Renovacao concluida",
-                    "Sua assinatura foi renovada ate " + s.getExpirationDate() + ".",
-                    Map.of("expiration", s.getExpirationDate().toString()),
-                    "notification|renewal-ok|" + s.getId() + "|" + cycleExpiration
-            );
-
-            log.info("renewal success subscriptionId={} userId={} newExpiration={}", s.getId(), s.getUserId(), s.getExpirationDate());
-            return;
-        }
-
-        attempt.setResult(RenewalAttemptResult.FAILURE);
-        attempt.setErrorCode(payment.errorCode());
-        attempt.setErrorMessage(payment.errorMessage());
-        attemptRepository.save(attempt);
-        billingMetrics.renewalAttempt(false, "sync");
-
-        s.setRenewalFailures(attemptNumber);
-
-        if (attemptNumber >= 3) {
-            s.setStatus(SubscriptionStatus.SUSPENSA);
-            s.setAutoRenew(false);
-            s.setNextRenewalAttemptAt(null);
-            s.setSuspendedAt(now);
-            s.setRenewalInFlightUntil(null);
-            subscriptionRepository.save(s);
-            subscriptionCache.evictActive(s.getUserId());
-            billingMetrics.subscriptionSuspended("sync");
-
-            notificationService.enqueue(
-                    NotificationService.SUBSCRIPTION_SUSPENDED,
-                    s.getUserId(),
-                    s.getId(),
-                    "Assinatura suspensa",
-                    "Sua assinatura foi suspensa apos falhas de cobranca.",
-                    Map.of("attempt", String.valueOf(attemptNumber)),
-                    "notification|suspended|" + s.getId() + "|" + cycleExpiration
-            );
-
-            log.warn("renewal failed 3x -> suspended subscriptionId={} userId={}", s.getId(), s.getUserId());
-            return;
-        }
-
-        Duration backoff = RenewalBackoff.afterFailedAttempt(attemptNumber);
-        s.setNextRenewalAttemptAt(now.plus(backoff));
-        s.setRenewalInFlightUntil(null);
-        subscriptionRepository.save(s);
-        subscriptionCache.evictActive(s.getUserId());
-
-        notificationService.enqueue(
-                NotificationService.RENEWAL_FAILED,
-                s.getUserId(),
-                s.getId(),
-                "Falha na renovacao",
-                "Nao foi possivel renovar sua assinatura. Tentativa " + attemptNumber + ".",
-                Map.of("attempt", String.valueOf(attemptNumber)),
-                "notification|renewal-fail|" + s.getId() + "|" + cycleExpiration + "|" + attemptNumber
-        );
-
-        log.info("renewal failed subscriptionId={} userId={} attempt={} nextAttemptAt={}",
-                s.getId(), s.getUserId(), attemptNumber, s.getNextRenewalAttemptAt());
     }
 }

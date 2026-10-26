@@ -1,83 +1,34 @@
-name: Sync master with develop
-
-# Fluxo recomendado: PR develop → master e merge pelo gh.
-#
-# Precisa de UM dos seguintes (fora deste YAML):
-#
-# A) Repositório → Settings → Actions → General → Workflow permissions:
-#    - marcado «Read and write»
-#    - marcado «Allow GitHub Actions to create and approve pull requests»
-#
-# OU
-#
-# B) Criar secret SYNC_REPO_PAT (Classic PAT com scopes repo + workflow, ou PAT fine-grained
-#    com leitura/escrita de conteúdo e Pull requests neste repo). Este token substitui
-#    GITHUB_TOKEN no passo seguinte quando definido.
-#
-# C) Com A) ou B) activos (permissões Actions ou secret SYNC_REPO_PAT), este workflow
-#    volta a despachar em cada push ao develop sem falhar checks.
+name: Verificar develop para PR manual
 
 on:
-  push:
-    branches: [develop]
   workflow_dispatch:
 
-concurrency:
-  group: sync-master-with-develop
-  cancel-in-progress: true
-
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  actions: read
 
 jobs:
-  merge:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Abrir ou reutilizar PR develop → master e fazer merge
-        env:
-          SYNC_REPO_PAT: ${{ secrets.SYNC_REPO_PAT }}
-          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${SYNC_REPO_PAT:-}" ]]; then
-            export GH_TOKEN="$SYNC_REPO_PAT"
-            echo "GH token: usando secret SYNC_REPO_PAT"
-          else
-            export GH_TOKEN="$FALLBACK_TOKEN"
-            echo "GH token: usando secrets.GITHUB_TOKEN (requere permissões de PR nas Actions)"
-          fi
-
-          git fetch origin master develop
-
-          MASTER=$(git rev-parse origin/master)
-          DEV=$(git rev-parse origin/develop)
-
-          if [[ "$MASTER" == "$DEV" ]]; then
-            echo "master já aponta para o mesmo commit que develop."
-            exit 0
-          fi
-
-          OPEN=$(gh pr list --repo "$REPOSITORY" --base master --head develop --state open --json number -q '.[0].number // empty')
-          if [[ -z "${OPEN:-}" ]] || [[ "$OPEN" == "null" ]]; then
-            gh pr create \
-              --repo "$REPOSITORY" \
-              --base master \
-              --head develop \
-              --title 'chore(sync): alinhar master com develop [automático]' \
-              --body $'Criado automaticamente pelo workflow *Sync master with develop*.'
-          fi
-
-          PR=$(gh pr list --repo "$REPOSITORY" --base master --head develop --state open --json number -q '.[0].number')
-
-          echo "Fazendo merge do PR #$PR"
-          gh pr merge "$PR" --repo "$REPOSITORY" --merge || {
-            echo "::error ::gh pr merge falhou (permissões, reviews obrigatórios ou conflitos)."
-            echo "Consulte os comentários no topo deste workflow (Settings → Actions ou secret SYNC_REPO_PAT)."
-            exit 1
-          }
+          persist-credentials: false
+      - name: Validar CI do commit atual de develop
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const checkDevelopCi = require('./.github/scripts/check-develop-ci.cjs');
+            const result = await checkDevelopCi({ github, context });
+            core.setOutput('validated-sha', result.sha);
+            core.setOutput('manual-pr-url', result.prUrl);
+            await core.summary
+              .addHeading('develop validado para revisão manual')
+              .addRaw(`Commit validado: ${result.sha}\n\n`)
+              .addLink('Ver commit', result.commitUrl)
+              .addRaw('\n\n')
+              .addLink('CI concluída com success', result.runUrl)
+              .addRaw('\n\n')
+              .addLink('Abrir PR develop → master manualmente', result.prUrl)
+              .addRaw('\n\nEsta checagem não cria PR nem realiza merge.\n')
+              .write();

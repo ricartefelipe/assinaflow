@@ -7,25 +7,36 @@
     <artifactId>assinaflow</artifactId>
     <version>1.0.2</version>
     <name>AssinaFlow</name>
-    <description>Sistema de gestao de assinaturas (Spring Boot 3 / Java 21)</description>
+    <description>Sistema de gestao de assinaturas (Spring Boot 4 / Java 21)</description>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.1</version>
+        <version>4.0.9</version>
         <relativePath/>
     </parent>
 
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
-        <springdoc.version>2.5.0</springdoc.version>
-        <testcontainers.version>1.19.8</testcontainers.version>
+        <springdoc.version>3.0.3</springdoc.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
         <awaitility.version>4.2.1</awaitility.version>
+        <rabbit-amqp-client.version>5.37.0</rabbit-amqp-client.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency><groupId>org.bouncycastle</groupId><artifactId>bcprov-jdk18on</artifactId><version>1.85</version></dependency>
+            <dependency><groupId>org.bouncycastle</groupId><artifactId>bcpkix-jdk18on</artifactId><version>1.85</version></dependency>
+            <dependency><groupId>org.bouncycastle</groupId><artifactId>bcutil-jdk18on</artifactId><version>1.85</version></dependency>
+            <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5</artifactId><version>5.4.3</version></dependency>
+            <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5-h2</artifactId><version>5.4.3</version></dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.26.2</version>
+            </dependency>
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
@@ -39,7 +50,15 @@
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-jackson2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
         <dependency>
@@ -107,8 +126,8 @@
         </dependency>
 
         <dependency>
-            <groupId>org.liquibase</groupId>
-            <artifactId>liquibase-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
         </dependency>
 
         <dependency>
@@ -117,10 +136,14 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.github.docker-java</groupId><artifactId>docker-java-transport-httpclient5</artifactId><version>3.7.1</version><scope>test</scope>
+        </dependency>
+        <dependency><groupId>com.github.docker-java</groupId><artifactId>docker-java-core</artifactId><version>3.7.1</version><scope>test</scope></dependency>
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -135,18 +158,21 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
+        <exclusions><exclusion><groupId>com.github.docker-java</groupId><artifactId>docker-java-transport-zerodep</artifactId></exclusion></exclusions>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
+        <exclusions><exclusion><groupId>com.github.docker-java</groupId><artifactId>docker-java-transport-zerodep</artifactId></exclusion></exclusions>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>rabbitmq</artifactId>
+            <artifactId>testcontainers-rabbitmq</artifactId>
             <scope>test</scope>
+        <exclusions><exclusion><groupId>com.github.docker-java</groupId><artifactId>docker-java-transport-zerodep</artifactId></exclusion></exclusions>
         </dependency>
         <dependency>
             <groupId>org.awaitility</groupId>
@@ -158,9 +184,13 @@
 
     <build>
         <plugins>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.16.0</version></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.5.0</version><dependencies><dependency><groupId>org.codehaus.plexus</groupId><artifactId>plexus-utils</artifactId><version>3.6.2</version></dependency></dependencies></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.5.1</version></plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.6.1</version>
                 <configuration>
                     <excludedGroups>integration</excludedGroups>
                 </configuration>
@@ -168,6 +198,11 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <dependencies>
+                    <dependency><groupId>org.codehaus.plexus</groupId><artifactId>plexus-utils</artifactId><version>3.6.2</version></dependency>
+                    <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5</artifactId><version>5.4.3</version></dependency>
+                    <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5-h2</artifactId><version>5.4.3</version></dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>

@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-stripe-sandbox
+      author: billing
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE stripe_customers (
+                user_id uuid PRIMARY KEY REFERENCES users(id), customer_id varchar(100) UNIQUE,
+                payment_method varchar(100), setup_session varchar(100), created_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE TABLE stripe_operations (
+                obligation_id uuid PRIMARY KEY REFERENCES payment_obligations(id),
+                customer_id varchar(100) NOT NULL, payment_method varchar(100) NOT NULL,
+                intent_id varchar(100) UNIQUE, state varchar(30) NOT NULL DEFAULT 'NEW',
+                confirmations integer NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE TABLE stripe_confirmations (
+                obligation_id uuid NOT NULL REFERENCES stripe_operations(obligation_id),
+                number integer NOT NULL, request_key varchar(240) NOT NULL UNIQUE,
+                payment_method varchar(100) NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (obligation_id, number)
+              );
+              CREATE TABLE stripe_webhook_inbox (
+                event_id varchar(100) PRIMARY KEY, payload_hash varchar(64) NOT NULL,
+                obligation_id uuid REFERENCES payment_obligations(id), customer_id varchar(100),
+                state varchar(15) NOT NULL DEFAULT 'PENDING', attempts integer NOT NULL DEFAULT 0,
+                available_at timestamptz NOT NULL DEFAULT now(), received_at timestamptz NOT NULL DEFAULT now()
+              );

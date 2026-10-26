@@ -13,7 +13,7 @@ public class ProrationService {
      */
     public int proratedDeltaCents(Plan from, Plan to, LocalDate startDate, LocalDate expirationDate, LocalDate today) {
         long cycleDays = Math.max(1, ChronoUnit.DAYS.between(startDate, expirationDate));
-        long remainingDays = Math.max(0, ChronoUnit.DAYS.between(today, expirationDate));
+        long remainingDays = Math.min(cycleDays, Math.max(0, ChronoUnit.DAYS.between(today, expirationDate)));
         int unusedFrom = (int) ((long) from.getPriceCents() * remainingDays / cycleDays);
         int unusedTo = (int) ((long) to.getPriceCents() * remainingDays / cycleDays);
         return unusedTo - unusedFrom;

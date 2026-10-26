@@ -36,6 +36,11 @@ springdoc:
     path: /v3/api-docs
 
 management:
+  health:
+    redis:
+      enabled: false
+    rabbit:
+      enabled: ${app.payments.async.enabled:false}
   endpoints:
     web:
       exposure:
@@ -46,9 +51,14 @@ management:
         enabled: true
 
 app:
+  billing:
+    mode: ${APP_BILLING_MODE:demo}
   scheduler:
     enabled: ${APP_SCHEDULER_ENABLED:true}
   payments:
+    recovery:
+      enabled: ${app.scheduler.enabled:true}
+      delay-ms: 15000
     gateway: ${APP_PAYMENTS_GATEWAY:simulated}
     http:
       url: ${APP_PAYMENTS_HTTP_URL:http://localhost:9090/charge}
