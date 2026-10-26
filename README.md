@@ -170,7 +170,6 @@ mvn verify -P integration-tests
 
 ### Usuários
 
-- `POST /api/v1/users`
 - `GET /api/v1/users/{userId}`
 - `PUT /api/v1/users/{userId}/payment-profile`
 
