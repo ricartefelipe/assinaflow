@@ -7,7 +7,12 @@ COPY pom.xml ./
 COPY src ./src
 
 RUN mvn -q -DskipTests package
-RUN apt-get update && apt-get install -y --only-upgrade --no-install-recommends libssl3t64 openssl \
+# O Maven da imagem embute guava 33.6.0 (CVE-2026-102554); a correção publicada é 33.7.2, trocada
+# pelo artefato oficial com SHA-256 conferido. Pacotes do SO recebem as correções disponíveis.
+ADD --checksum=sha256:b530942257fb935f8b2cfaa5f8eb5bd59c555fd8e8d01b8ce98912e077ea606c \
+    https://repo1.maven.org/maven2/com/google/guava/guava/33.7.2-jre/guava-33.7.2-jre.jar /usr/share/maven/lib/guava-33.7.2-jre.jar
+RUN rm -f /usr/share/maven/lib/guava-33.6.0-jre.jar \
+    && apt-get update && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 FROM eclipse-temurin:21-jre
