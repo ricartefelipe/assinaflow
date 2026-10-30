@@ -64,7 +64,7 @@ def start(database, log, recovery=False):
                JWT_SECRET=JWT_SECRET)
     # Override inherited Spring configuration that could redirect a test process.
     args = [f'--spring.datasource.url={env["DB_URL"]}', '--spring.datasource.username=proof',
-            '--spring.datasource.password=synthetic-proof-only', '--spring.profiles.active=',
+            f'--spring.datasource.password={DB_PASSWORD}', '--spring.profiles.active=',
             '--spring.cache.type=simple', '--spring.config.location=classpath:/application.yml',
             '--management.health.redis.enabled=false', '--management.health.rabbit.enabled=false',
             '--spring.rabbitmq.dynamic=false', '--app.notifications.sender=logging', '--app.scheduler.enabled=false',
