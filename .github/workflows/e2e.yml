@@ -1,3 +1,7 @@
+# Smoke de navegador opcional contra uma API externa já em execução (manual).
+# Não substitui o gate de navegador da CI principal (ci.yml: verify-isolated.py --frontend e
+# verify-stack.py, que sobem a stack real e falham o job). Sem E2E_API_URL o job termina
+# explicitamente como "não executado"; com a variável definida, uma falha do smoke falha o job.
 name: e2e
 
 on:
@@ -11,20 +15,25 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - name: Sem API externa configurada
+        if: vars.E2E_API_URL == ''
+        run: |
+          echo "::notice::E2E_API_URL não definida. Smoke contra API externa não executado (não é falha nem aprovação)."
       - uses: actions/setup-node@v4
+        if: vars.E2E_API_URL != ''
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install deps
-        run: npm ci
+        if: vars.E2E_API_URL != ''
+        run: npm ci --ignore-scripts
       - name: Install Playwright Chromium
+        if: vars.E2E_API_URL != ''
         run: npx playwright install --with-deps chromium
-      - name: Note
-        run: echo "Este job assume API externa. Configure E2E_API_URL se necessario. Por padrao o smoke e pulado sem API."
-      - name: Run smoke
+      - name: Run smoke against external API
+        if: vars.E2E_API_URL != ''
         env:
           E2E_API_URL: ${{ vars.E2E_API_URL }}
           CI: true
         run: npm run test:e2e
-        continue-on-error: true

@@ -98,3 +98,27 @@ Checklist única:
 - [ ] Executar CI remota sobre o commit publicado; os gates continuam obrigatórios HIGH/CRITICAL.
 - [ ] Disponibilizar credenciais Stripe sandbox e executar/acompanhar o roteiro externo de aprovação, recusa, autenticação, renovação, eventos, replay e cancelamento; Stripe já está definido, não há escolha indefinida de provedor.
 - [ ] Decidir tratamento dos residuais/limites operacionais antes de qualquer piloto ou produção. Cobrança real exige homologação comprovada e autorização explícita distinta.
+
+## Complemento — 29/10/2026 (fechamento V5)
+
+Reexecução local dos gates da CI sobre `develop` (`50917f4`, conteúdo igual ao de `master`
+`ead6a0a`), sem alterar o npm global do host (os passos do frontend rodaram com o npm do host e
+`npm ci --ignore-scripts`):
+
+| Gate | Resultado |
+|---|---|
+| `node --test .github/scripts/check-develop-ci.test.cjs` | 28 testes, 0 falhas |
+| Backend `mvn clean verify -P integration-tests` (PostgreSQL/RabbitMQ corrigidos) | **99 testes, 0 falhas, 0 erros, 0 skips**, duas execuções (antes e depois das correções abaixo) |
+| Frontend `npm ci`, `build`, `lint`, `npm audit --omit=dev`, `npm audit` | aprovado, 0 vulnerabilidades |
+| `verify-isolated.py --frontend` | PASS: intenção persistida, resposta perdida, reinício da JVM, consulta ao provedor, renovação com um efeito financeiro; dump restaurado em banco vazio, leitura autenticada e cancelamento |
+| Imagens finais + `verify-stack.py` | PASS: stack isolada (PostgreSQL, Redis, RabbitMQ, API, Nginx) e jornada de navegador sem retries, duas execuções |
+| SBOM CycloneDX + Trivy 0.76.1 (DB 29/10/2026) | runtime 0 HIGH/CRITICAL; completo/testes tinha 1 HIGH (`guava` 33.4.8 via `docker-java-core`, CVE-2026-102554) → 0 com `guava` 33.7.2 gerido no POM |
+| Oito imagens (runtime e build) | Três alvos tinham HIGH novos desde 26/10: `assinaflow-postgres:16-patched` (OpenSSL 3.5.7, util-linux 2.42.1 → `apk upgrade` na imagem), `assinaflow-security-backend-build` (`guava` 33.6.0 embutido no Maven 3.9.16, sem tag corrigida publicada → artefato oficial 33.7.2 com SHA-256 conferido substitui o jar; `libbrotli1` → `apt-get upgrade`). Após a reconstrução: **todas as oito com 0 HIGH/CRITICAL** (IDs: postgres `779e377e43cf`, backend `f374bb86f6a3`, backend-build `cc82bbc1c15e`, frontend `d69e4f1637a8`, redis `abebb70bf13d`, rabbitmq `010f834871d2`, frontend-build `69e77077a19d`, gosu-build `728c6560a2bf`) |
+| `curl`/`libcurl` do frontend | `apk add 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'` no `frontend/Dockerfile`; imagem final `d69e4f1637a8` sem achados |
+| Contrato Stripe (idempotência) | Conferido na documentação oficial de `idempotent_requests`: chaves v1 podem ser expurgadas após 24 h (limite local conservador de 23 h), mesma chave com parâmetros diferentes é recusada, resposta gravada — inclusive 500 — é devolvida; só há gravação após a execução do endpoint começar. Nada importado de outro provedor |
+| `scripts/verify-stripe-sandbox.py` | Códigos de saída distintos: 0 aprovado, 1 falha, 2 configuração (antes de rede; provado sem credencial), 3 inconclusivo (sem reenvio) |
+| `e2e.yml` | Manual (`workflow_dispatch`) sem `continue-on-error`: sem `E2E_API_URL` termina como "não executado"; com ela, falha do smoke falha o job. Não substitui o gate de navegador de `ci.yml`, que permanece bloqueante |
+
+Continua bloqueado por insumo externo: homologação no sandbox real da Stripe (chave `sk_test_`,
+publishable key, webhook secret e conta sintética) e, por consequência, o GO financeiro. O roteiro
+executável está em [operations.md](operations.md).

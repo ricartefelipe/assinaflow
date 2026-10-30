@@ -341,6 +341,8 @@ Métricas de domínio:
 
 Os testes de integração utilizam Testcontainers e exigem um daemon Docker disponível.
 
+O gate de navegador obrigatório está na CI principal (`ci.yml`: `scripts/verify-isolated.py --frontend` e `scripts/verify-stack.py`, que sobem a stack real e falham o job). O workflow manual `e2e.yml` é um smoke opcional contra uma API externa já em execução: sem a variável `E2E_API_URL` ele termina como "não executado", e com ela definida uma falha do smoke falha o job. Ele não substitui nem relaxa a CI principal.
+
 ## Operação
 
 JWT exige issuer/audience e assinatura; tokens antigos exigem novo login. Usuários desabilitados/expirados e papéis removidos têm efeito na próxima requisição. Não há refresh token nem logout com revogação individual. As rotas `/users/{id}` são exclusivas do titular; ADMIN atua em `/admin`, sem bypass de ownership. Auditoria administrativa completa permanece pendente.

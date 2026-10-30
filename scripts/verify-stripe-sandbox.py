@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Acceptance against an explicitly configured Stripe sandbox and local synthetic account."""
 import argparse
+
+
+class Inconclusive(Exception):
+    """Sem prova positiva nem negativa (janela de aceitação ou busca eventual): não reenviar."""
+
 import base64
 import json
 import os
@@ -17,7 +22,7 @@ import urllib.request
 def call(url, data=None, token=None, stripe=False):
     headers = {}
     if stripe:
-        key = os.environ['STRIPE_SECRET_KEY']
+        key = os.environ.get('STRIPE_SECRET_KEY', '')
         if not key.startswith('sk_test_'):
             raise RuntimeError('Only a Stripe test secret key is allowed')
         headers['Authorization'] = 'Basic ' + base64.b64encode((key + ':').encode()).decode()
@@ -100,10 +105,12 @@ def main():
             if args.phase != 'renewal' or len(rows) >= 2:
                 break
         time.sleep(2)
-    assert payment and payment['status'] == 'APPROVED' and (args.phase != 'renewal' or len(rows) >= 2), 'No confirmed approval within the acceptance window'
+    if not (payment and payment['status'] == 'APPROVED' and (args.phase != 'renewal' or len(rows) >= 2)):
+        raise Inconclusive('No confirmed approval within the acceptance window')
     query = "metadata['obligation_id']:'" + payment['id'] + "'"
     status, result = call('https://api.stripe.com/v1/payment_intents/search?' + urllib.parse.urlencode({'query': query, 'limit': 2}), stripe=True)
-    assert status == 200 and not result['has_more'] and len(result['data']) == 1, 'Search is eventually consistent; absence is not proof of no debit'
+    if not (status == 200 and not result['has_more'] and len(result['data']) == 1):
+        raise Inconclusive('Search is eventually consistent; absence is not proof of no debit')
     intent = result['data'][0]
     assert intent['livemode'] is False and intent['status'] == 'succeeded'
     assert intent['metadata']['user_id'] == user and intent['currency'] == 'brl' and intent['amount'] == payment['amount_cents']
@@ -125,8 +132,16 @@ def main():
 
 
 if __name__ == '__main__':
+    # Códigos de saída: 0 aprovado; 1 falha; 2 configuração (credencial ausente ou não de teste);
+    # 3 inconclusivo (sem prova em nenhum sentido: consultar de novo, nunca reenviar).
     try:
         main()
+    except RuntimeError as error:
+        print('CONFIG: ' + str(error), file=sys.stderr)
+        sys.exit(2)
+    except Inconclusive as error:
+        print('INCONCLUSIVE: ' + str(error) + '; do not resend, query again later', file=sys.stderr)
+        sys.exit(3)
     except Exception:
         print('FAIL: sandbox acceptance not completed; check configuration and the selected phase without logging secrets', file=sys.stderr)
         sys.exit(1)
