@@ -43,15 +43,28 @@ def call(url, data=None, token=None, stripe=False):
         return error.code, None
 
 
+# Só o loopback do próprio host, em claro por ser a aplicação local isolada (sem rede externa).
+LOCAL_BASES = {'127.0.0.1': 'http://127.0.0.1', 'localhost': 'http://localhost'}
+
+
+def local_base(requested):
+    """Reconstrói a base só a partir de valores fixos: o script nunca sai da aplicação local isolada."""
+    url = urllib.parse.urlsplit(requested)
+    if url.scheme != 'http' or url.username or url.password or url.path not in ('', '/') or url.query or url.fragment:
+        raise RuntimeError('Use only the isolated local application')
+    base = next((fixed for host, fixed in LOCAL_BASES.items() if host == url.hostname), None)
+    if base is None:
+        raise RuntimeError('Use only the isolated local application')
+    return '%s:%d' % (base, int(url.port or 8080))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--base', default=os.environ.get('SANDBOX_API_URL', 'http://127.0.0.1:8080'))
     parser.add_argument('--phase', choices=['approve', 'decline', 'action', 'prepare-renewal', 'renewal', 'replay', 'cancel'], required=True)
     parser.add_argument('--wait-seconds', type=int, default=180)
     args = parser.parse_args()
-    url = urllib.parse.urlsplit(args.base)
-    if url.hostname not in ['127.0.0.1', 'localhost'] or url.scheme != 'http' or url.username or url.password:
-        raise RuntimeError('Use only the isolated local application')
+    base = local_base(args.base)
     required = ['STRIPE_SECRET_KEY', 'SANDBOX_EMAIL', 'SANDBOX_PASSWORD']
     if any(not os.environ.get(key) for key in required):
         raise RuntimeError('Required environment variable names: ' + ', '.join(required))
@@ -59,12 +72,12 @@ def main():
         raise RuntimeError('Only a Stripe test secret key is allowed')
     if not os.environ['SANDBOX_EMAIL'].endswith('@example.test'):
         raise RuntimeError('Use an isolated synthetic account ending in @example.test')
-    status, config = call(args.base + '/api/v1/billing/config')
+    status, config = call(base + '/api/v1/billing/config')
     assert status == 200 and config['gateway'] == 'stripe' and config['mode'] == 'sandbox'
-    status, login = call(args.base + '/api/v1/auth/login', {'email': os.environ['SANDBOX_EMAIL'], 'senha': os.environ['SANDBOX_PASSWORD']})
+    status, login = call(base + '/api/v1/auth/login', {'email': os.environ['SANDBOX_EMAIL'], 'senha': os.environ['SANDBOX_PASSWORD']})
     assert status == 200
     token, user = login['accessToken'], login['user']['id']
-    path = args.base + '/api/v1/users/' + user
+    path = base + '/api/v1/users/' + user
     assert call(path + '/billing/status', token=token)[1]['ready'], 'Complete hosted card setup in the portal first'
     if args.phase in ['approve', 'decline', 'action']:
         status, _ = call(path + '/subscriptions', {'plano': 'BASICO'}, token)
