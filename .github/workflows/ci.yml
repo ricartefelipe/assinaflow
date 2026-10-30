@@ -39,7 +39,7 @@ jobs:
           npm run lint
           npm audit --omit=dev
           npm audit
-          npx playwright install --with-deps chromium
+          npx --no-install playwright install --with-deps chromium
       - name: Integrated journey, browser without retries, restart and restore
         env:
           TEST_POSTGRES_IMAGE: assinaflow-postgres:16-patched
