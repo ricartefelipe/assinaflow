@@ -97,6 +97,11 @@ python3 scripts/verify-stripe-sandbox.py --base http://127.0.0.1:8080 --phase de
 python3 scripts/verify-stripe-sandbox.py --base http://127.0.0.1:8080 --phase action
 ```
 
+Códigos de saída do verificador: `0` aprovado; `1` falha; `2` configuração (variáveis ausentes ou chave que não é `sk_test_`), antes de qualquer rede; `3` inconclusivo (sem aprovação na janela ou busca Stripe ainda sem resultado) — consultar de novo, nunca reenviar. A documentação oficial de idempotência v1 ([idempotent_requests](https://docs.stripe.com/api/idempotent_requests)) confirma o modelo adotado: chaves podem ser expurgadas após 24 h (por isso o limite conservador de 23 h), a mesma chave com parâmetros diferentes é recusada, a resposta gravada — inclusive `500` — é devolvida na repetição e só há gravação depois que a execução do endpoint começa.
+
+```bash
+```
+
 `approve` usa conta sem assinatura e método aprovado; `decline` outra conta sem assinatura e método de recusa; `action` outra conta e conclusão manual no componente do provedor. Esperados201/400/503 respectivamente, nenhuma assinatura ativa na recusa ou antes da autenticação, depois confirmação do servidor. Verificador exige app Stripe sandbox/loopback, conta @example.test, chave de teste e correlação remota; não imprime tokens/client secrets/corpos de erro. Busca eventualmente consistente pode impedir concluir dentro do prazo; isso é evidência inconclusiva, não prova de ausência de débito. Não repetir criação de cobrança como diagnóstico.
 
 5. Renovação: com a conta aprovada deste roteiro, executar `python3 scripts/verify-stripe-sandbox.py --phase prepare-renewal` e depois `python3 scripts/verify-stripe-sandbox.py --phase renewal`. A preparação exige container de prefixo próprio e label de sandbox, sem bind mounts, e somente pagamentos aprovados/aplicados da conta sintética autenticada. Ajusta exclusivamente sua assinatura para um ciclo vencido, incrementando a versão; não usar banco preexistente. O scheduler de cinco segundos acima deverá criar outra obrigação/intent e uma única aprovação; se o processamento já tiver ocorrido, o verificador aceita a evidência persistente correspondente. Webhooks reais devem aparecer na inbox como DONE, correlacionados ao lookup; payloads/chaves não entram no relatório.
