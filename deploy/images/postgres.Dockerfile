@@ -5,5 +5,7 @@ RUN tar -xzf /tmp/gosu.tar.gz --strip-components=1 \
     && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/gosu .
 
 FROM postgres:16-alpine
+# Pacotes do Alpine com correções publicadas depois da imagem base (OpenSSL, util-linux).
+RUN apk upgrade --no-cache
 COPY --from=gosu-build /out/gosu /usr/local/bin/gosu
 RUN gosu nobody true

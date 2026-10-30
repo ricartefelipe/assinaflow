@@ -5,7 +5,7 @@
 
     <groupId>br.com.ricarte</groupId>
     <artifactId>assinaflow</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <name>AssinaFlow</name>
     <description>Sistema de gestao de assinaturas (Spring Boot 4 / Java 21)</description>
 
@@ -27,6 +27,8 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- docker-java-core (teste) traz guava 33.4.8 com CVE-2026-102554; 33.7.2 corrige. -->
+            <dependency><groupId>com.google.guava</groupId><artifactId>guava</artifactId><version>33.7.2-jre</version></dependency>
             <dependency><groupId>org.bouncycastle</groupId><artifactId>bcprov-jdk18on</artifactId><version>1.85</version></dependency>
             <dependency><groupId>org.bouncycastle</groupId><artifactId>bcpkix-jdk18on</artifactId><version>1.85</version></dependency>
             <dependency><groupId>org.bouncycastle</groupId><artifactId>bcutil-jdk18on</artifactId><version>1.85</version></dependency>

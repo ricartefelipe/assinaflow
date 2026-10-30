@@ -12,6 +12,17 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def backend_jar():
+    """JAR executável do backend, independente da versão no POM (ignora o *.original do Boot)."""
+    candidates = sorted(
+        path for path in (ROOT / 'backend/target').glob('assinaflow-*.jar')
+        if not path.name.endswith('.original')
+    )
+    if not candidates:
+        raise RuntimeError('backend jar not found; run mvn package first')
+    return candidates[-1]
+
 NAME = 'assinaflow-proof-' + uuid.uuid4().hex[:12]
 TOKEN = None
 
@@ -56,7 +67,7 @@ def start(database, log, recovery=False):
             '--app.payments.async.enabled=false', '--app.security.enabled=true',
             '--app.payments.gateway=simulated', '--app.billing.mode=demo', f'--server.port={PORT}',
             f'--app.payments.recovery.enabled={str(recovery).lower()}', '--app.payments.recovery.delay-ms=250']
-    process = subprocess.Popen(['java', '-jar', str(ROOT / 'backend/target/assinaflow-1.0.2.jar'), *args],
+    process = subprocess.Popen(['java', '-jar', str(backend_jar()), *args],
                                env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
         deadline = time.monotonic() + 120
