@@ -8,9 +8,12 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
-FROM nginx:1.30.6-alpine
-RUN apk upgrade --no-cache brotli-libs \
+# Variante sem root do nginx oficial: processo mestre e workers como usuario nginx (porta 8080).
+FROM nginxinc/nginx-unprivileged:1.30-alpine
+USER root
+RUN apk upgrade --no-cache \
     && apk add --no-cache 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
+USER nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080

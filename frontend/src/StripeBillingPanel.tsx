@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from './api/client'
+import { hostedCheckoutUrl } from './billing/hostedCheckout'
 
 type StripeClient = {confirmCardPayment: (secret: string, options: {payment_method: string}) => Promise<{error?: {message?: string}}>}
 async function stripeClient(key: string): Promise<StripeClient> {
@@ -34,7 +35,7 @@ export function StripeBillingPanel({userId}: {userId: string}) {
     try {
       const result = await api.billingSetup(userId)
       if (!result) throw new Error('Cadastro indisponível.')
-      window.location.assign(result.url)
+      window.location.assign(hostedCheckoutUrl(result.url))
     } catch {setError('Não foi possível abrir o cadastro seguro.'); setBusy(false)}
   }
   async function action(id: string) {

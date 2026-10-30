@@ -30,7 +30,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Install Playwright Chromium
         if: vars.E2E_API_URL != ''
-        run: npx playwright install --with-deps chromium
+        run: npx --no-install playwright install --with-deps chromium
       - name: Run smoke against external API
         if: vars.E2E_API_URL != ''
         env:

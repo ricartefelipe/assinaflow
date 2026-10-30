@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import secrets
 import socket
 import subprocess
 import tempfile
@@ -24,6 +25,9 @@ def backend_jar():
     return candidates[-1]
 
 NAME = 'assinaflow-proof-' + uuid.uuid4().hex[:12]
+# Credenciais sinteticas geradas por execucao: nunca fixas no codigo, nunca reutilizaveis.
+DB_PASSWORD = secrets.token_urlsafe(24)
+JWT_SECRET = secrets.token_urlsafe(48)
 TOKEN = None
 
 
@@ -54,13 +58,13 @@ def request(path, payload=None, expected=200, token=None):
 
 def start(database, log, recovery=False):
     env = dict(os.environ, DB_URL=f'jdbc:postgresql://127.0.0.1:{DB_PORT}/{database}',
-               DB_USERNAME='proof', DB_PASSWORD='synthetic-proof-only', SERVER_PORT=str(PORT),
+               DB_USERNAME='proof', DB_PASSWORD=DB_PASSWORD, SERVER_PORT=str(PORT),
                APP_SCHEDULER_ENABLED='false', APP_PAYMENTS_ASYNC_ENABLED='false',
                APP_SECURITY_ENABLED='true', APP_PAYMENTS_GATEWAY='simulated', APP_BILLING_MODE='demo',
-               JWT_SECRET='synthetic-proof-only-secret-key-at-least-32-bytes')
+               JWT_SECRET=JWT_SECRET)
     # Override inherited Spring configuration that could redirect a test process.
     args = [f'--spring.datasource.url={env["DB_URL"]}', '--spring.datasource.username=proof',
-            '--spring.datasource.password=synthetic-proof-only', '--spring.profiles.active=',
+            f'--spring.datasource.password={DB_PASSWORD}', '--spring.profiles.active=',
             '--spring.cache.type=simple', '--spring.config.location=classpath:/application.yml',
             '--management.health.redis.enabled=false', '--management.health.rabbit.enabled=false',
             '--spring.rabbitmq.dynamic=false', '--app.notifications.sender=logging', '--app.scheduler.enabled=false',
@@ -104,7 +108,7 @@ if __name__ == '__main__':
         try:
             run('docker', 'run', '--rm', '-d', '--name', NAME, '-p', '127.0.0.1::5432',
                 '-e', 'POSTGRES_DB=proof', '-e', 'POSTGRES_USER=proof',
-                '-e', 'POSTGRES_PASSWORD=synthetic-proof-only', os.environ.get('TEST_POSTGRES_IMAGE', 'postgres:16-alpine'))
+                '-e', f'POSTGRES_PASSWORD={DB_PASSWORD}', os.environ.get('TEST_POSTGRES_IMAGE', 'postgres:16-alpine'))
             created = True
             DB_PORT = run('docker', 'port', NAME, '5432/tcp').rsplit(':', 1)[1]
             for _ in range(60):
@@ -171,9 +175,9 @@ if __name__ == '__main__':
                 print('PASS: persisted intent, lost approval response, JVM restart, provider lookup, renewal and one financial effect')
                 stop(process)
                 process = None
-                run('docker', 'exec', NAME, 'pg_dump', '-U', 'proof', '-d', 'proof', '-Fc', '-f', '/tmp/proof.dump')
+                run('docker', 'exec', NAME, 'pg_dump', '-U', 'proof', '-d', 'proof', '-Fc', '-f', '/var/lib/postgresql/proof.dump')
                 run('docker', 'exec', NAME, 'createdb', '-U', 'proof', 'restored')
-                run('docker', 'exec', NAME, 'pg_restore', '--exit-on-error', '-U', 'proof', '-d', 'restored', '/tmp/proof.dump')
+                run('docker', 'exec', NAME, 'pg_restore', '--exit-on-error', '-U', 'proof', '-d', 'restored', '/var/lib/postgresql/proof.dump')
                 process = start('restored', log)
                 restored = request(path + '/active', token=TOKEN)
                 assert restored['id'] == subscription['id']

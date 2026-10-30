@@ -40,10 +40,9 @@ public class StripeCustomers {
                 "success_url",returnUrl+"?stripe_setup=complete","cancel_url",returnUrl+"?stripe_setup=canceled"));
         testObject(session);
         if (!customer.equals(text(session,"customer")) || !text(session,"id").startsWith("cs_test_")) throw new IllegalStateException("Invalid setup session");
-        URI url=URI.create(text(session,"url"));
-        if (!"https".equals(url.getScheme()) || !"checkout.stripe.com".equals(url.getHost())) throw new IllegalStateException("Invalid hosted URL");
+        String url=HostedCheckoutUrl.require(text(session,"url"));
         jdbc.update("UPDATE stripe_customers SET setup_session=? WHERE user_id=?",text(session,"id"),user);
-        return url.toString();
+        return url;
     }
     public boolean refresh(UUID user) {
         var rows=jdbc.queryForList("SELECT * FROM stripe_customers WHERE user_id=?",user);

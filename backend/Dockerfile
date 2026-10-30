@@ -17,10 +17,15 @@ RUN rm -f /usr/share/maven/lib/guava-33.6.0-jre.jar \
 
 FROM eclipse-temurin:21-jre
 # Java/Maven run directly; the unused base-image service supervisor is omitted.
-RUN if [ -f /usr/bin/pebble ]; then rm /usr/bin/pebble; fi
+RUN if [ -f /usr/bin/pebble ]; then rm /usr/bin/pebble; fi \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app app
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar /app/app.jar
+COPY --from=build --chown=app:app /app/target/*.jar /app/app.jar
+
+# Sem privilegios: a JVM nao precisa de root.
+USER app
 
 EXPOSE 8080
 

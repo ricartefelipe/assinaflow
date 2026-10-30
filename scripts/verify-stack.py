@@ -41,7 +41,7 @@ def main():
       APP_CORS_ORIGINS: http://127.0.0.1:{web_port}
   web:
     image: assinaflow-validation-stripe-frontend:local
-    ports: !override ["127.0.0.1:{web_port}:80"]
+    ports: !override ["127.0.0.1:{web_port}:8080"]
 ''')
         compose = ['docker', 'compose', '-p', project, '-f', str(ROOT / 'docker-compose.yml'), '-f', str(override)]
         try:

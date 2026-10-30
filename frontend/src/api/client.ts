@@ -25,6 +25,8 @@ export function setToken(token: string | null): void {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, auth = false): Promise<T | null> {
+  // Caminhos sao sempre relativos a API propria; nada de origem externa ou traversal.
+  if (!path.startsWith('/api/') || path.includes('..')) throw new Error('Caminho de API inválido.')
   const headers = new Headers(init.headers)
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json')
