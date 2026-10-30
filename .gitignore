@@ -17,3 +17,7 @@ backend/target/
 
 # Local env
 .env
+
+# Bytecode do Python gerado por testes locais
+__pycache__/
+*.pyc
