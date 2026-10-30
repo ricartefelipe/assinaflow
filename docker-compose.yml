@@ -80,7 +80,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "9084:80"
+      - "9084:8080"
     depends_on:
       - app
 
