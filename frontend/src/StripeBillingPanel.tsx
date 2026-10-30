@@ -34,7 +34,10 @@ export function StripeBillingPanel({userId}: {userId: string}) {
     try {
       const result = await api.billingSetup(userId)
       if (!result) throw new Error('Cadastro indisponível.')
-      window.location.assign(result.url)
+      // Só a página hospedada do Stripe (HTTPS) é um destino válido; qualquer outra URL é recusada.
+      const hosted = new URL(result.url)
+      if (hosted.protocol !== 'https:' || hosted.hostname !== 'checkout.stripe.com') throw new Error('Destino inválido.')
+      window.location.assign(hosted.toString())
     } catch {setError('Não foi possível abrir o cadastro seguro.'); setBusy(false)}
   }
   async function action(id: string) {
