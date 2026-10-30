@@ -43,7 +43,8 @@ def call(url, data=None, token=None, stripe=False):
         return error.code, None
 
 
-LOCAL_HOSTS = ('127.0.0.1', 'localhost')
+# Só o loopback do próprio host, em claro por ser a aplicação local isolada (sem rede externa).
+LOCAL_BASES = {'127.0.0.1': 'http://127.0.0.1', 'localhost': 'http://localhost'}
 
 
 def local_base(requested):
@@ -51,10 +52,10 @@ def local_base(requested):
     url = urllib.parse.urlsplit(requested)
     if url.scheme != 'http' or url.username or url.password or url.path not in ('', '/') or url.query or url.fragment:
         raise RuntimeError('Use only the isolated local application')
-    host = next((candidate for candidate in LOCAL_HOSTS if candidate == url.hostname), None)
-    if host is None:
+    base = next((fixed for host, fixed in LOCAL_BASES.items() if host == url.hostname), None)
+    if base is None:
         raise RuntimeError('Use only the isolated local application')
-    return 'http://%s:%d' % (host, int(url.port or 8080))
+    return '%s:%d' % (base, int(url.port or 8080))
 
 
 def main():
