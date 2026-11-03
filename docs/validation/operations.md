@@ -15,9 +15,9 @@ Na raiz:
 ```sh
 docker build -f deploy/images/postgres.Dockerfile -t assinaflow-postgres:16-patched deploy/images
 docker build -f deploy/images/redis.Dockerfile -t assinaflow-redis:7-patched deploy/images
-docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:3-patched deploy/images
+docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:4-patched deploy/images
 cd backend
-mvn -B verify -P integration-tests -Dtest.postgres.image=assinaflow-postgres:16-patched -Dtest.rabbitmq.image=assinaflow-rabbitmq:3-patched
+mvn -B verify -P integration-tests -Dtest.postgres.image=assinaflow-postgres:16-patched -Dtest.rabbitmq.image=assinaflow-rabbitmq:4-patched
 ```
 
 No Docker Desktop local foi necessário definir seu socket em `DOCKER_HOST`; não copiar socket/endereço de outra instalação. O POM define os plugins estáveis necessários; testes sem profile integration-tests não substituem o gate completo. `StripeContractIntegrationTest` intercepta HTTP no próprio teste e usa credenciais sintéticas, não acessa a Stripe externa.
