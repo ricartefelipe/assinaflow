@@ -25,10 +25,10 @@ jobs:
         run: |
           docker build -f deploy/images/postgres.Dockerfile -t assinaflow-postgres:16-patched deploy/images
           docker build -f deploy/images/redis.Dockerfile -t assinaflow-redis:7-patched deploy/images
-          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:3-patched deploy/images
+          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:4-patched deploy/images
       - name: Backend, financial recovery, authorization and migration
         working-directory: backend
-        run: mvn -B clean verify -P integration-tests -Dtest.rabbitmq.image=assinaflow-rabbitmq:3-patched -Dtest.postgres.image=assinaflow-postgres:16-patched
+        run: mvn -B clean verify -P integration-tests -Dtest.rabbitmq.image=assinaflow-rabbitmq:4-patched -Dtest.postgres.image=assinaflow-postgres:16-patched
       - name: Frontend installation, build, lint and audit
         working-directory: frontend
         run: |
@@ -89,14 +89,14 @@ jobs:
           docker build -f deploy/images/postgres.Dockerfile -t assinaflow-postgres:16-patched deploy/images
           docker build -f deploy/images/postgres.Dockerfile --target gosu-build -t assinaflow-security-gosu-build deploy/images
           docker build -f deploy/images/redis.Dockerfile -t assinaflow-redis:7-patched deploy/images
-          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:3-patched deploy/images
+          docker build -f deploy/images/rabbitmq.Dockerfile -t assinaflow-rabbitmq:4-patched deploy/images
       - name: Audit runtime and build images independently
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/security-images" "$RUNNER_TEMP/trivy-cache"
           status=0
           i=0
-          for image in assinaflow-security-backend assinaflow-security-frontend assinaflow-postgres:16-patched assinaflow-redis:7-patched assinaflow-rabbitmq:3-patched assinaflow-security-backend-build assinaflow-security-frontend-build assinaflow-security-gosu-build; do
+          for image in assinaflow-security-backend assinaflow-security-frontend assinaflow-postgres:16-patched assinaflow-redis:7-patched assinaflow-rabbitmq:4-patched assinaflow-security-backend-build assinaflow-security-frontend-build assinaflow-security-gosu-build; do
             i=$((i+1))
             if ! docker image inspect "$image" >/dev/null 2>&1; then docker pull "$image" || status=1; fi
             docker save -o "$RUNNER_TEMP/security-images/image-$i.tar" "$image" || status=1

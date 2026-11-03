@@ -32,7 +32,7 @@ services:
       retries: 20
 
   rabbitmq:
-    image: assinaflow-rabbitmq:3-patched
+    image: assinaflow-rabbitmq:4-patched
     build:
       context: ./deploy/images
       dockerfile: rabbitmq.Dockerfile
