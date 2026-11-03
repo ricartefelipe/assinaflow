@@ -51,7 +51,7 @@ public class AsyncPaymentsIntegrationTest {
 
     @Container
     static final RabbitMQContainer rabbit = new RabbitMQContainer(org.testcontainers.utility.DockerImageName.parse(
-                    System.getProperty("test.rabbitmq.image", "rabbitmq:3-management-alpine"))
+                    System.getProperty("test.rabbitmq.image", "rabbitmq:4.4.0-management-alpine"))
                     .asCompatibleSubstituteFor("rabbitmq"))
             .withStartupTimeout(java.time.Duration.ofMinutes(3));
 

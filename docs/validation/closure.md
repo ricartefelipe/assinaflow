@@ -1,5 +1,7 @@
 # Fechamento integrado — 26/10/2026
 
+> Atualização de 03/11/2026: o RabbitMQ passou da linha 3, sem correções, para a 4.4.0 (`assinaflow-rabbitmq:4-patched`, sem nenhuma vulnerabilidade na análise de 03/11/2026). Comandos, contagens e identidades abaixo são da validação de 26/10/2026; os comandos atuais estão em [operations.md](operations.md).
+
 Implementação local concluída e validada: motor durável preservado, Stripe sandbox integrado à jornada, webhooks autenticados e gates locais aprovados. **Homologação externa Stripe não executada: credenciais de teste indisponíveis. NO-GO financeiro e produção mantidos.** Nenhuma cobrança real, envio real de mensagem, deploy ou publicação foi autorizado/executado.
 
 Base preservada: branch `feature/melhorias-para-escalabilidade`, HEAD `c501c3a35547cc0f84f37e76bb4c0946e1eaf510`, sem upstream. Esta execução recebeu38 modificados/28 novos e preservou todos. Nenhuma operação Git de escrita, staging, ref ou PR. Estado completo em [files.md](files.md); protocolo e roteiro executável em [operations.md](operations.md).
