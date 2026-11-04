@@ -75,7 +75,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trivy-cache"
           status=0
           for scope in runtime all; do
-            docker run --rm -v "$PWD:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1 sbom --scanners vuln --timeout 20m --format json --output "/scan/backend/target/audit-$scope.json" "/scan/backend/target/bom-$scope.json" || status=1
+            docker run --rm -v "$PWD:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c sbom --scanners vuln --timeout 20m --format json --output "/scan/backend/target/audit-$scope.json" "/scan/backend/target/bom-$scope.json" || status=1
             python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(any(v["Severity"] in ("HIGH","CRITICAL") for r in d.get("Results",[]) for v in r.get("Vulnerabilities",[])))' "backend/target/audit-$scope.json" || status=1
           done
           exit "$status"
@@ -100,7 +100,7 @@ jobs:
             i=$((i+1))
             if ! docker image inspect "$image" >/dev/null 2>&1; then docker pull "$image" || status=1; fi
             docker save -o "$RUNNER_TEMP/security-images/image-$i.tar" "$image" || status=1
-            docker run --rm -v "$RUNNER_TEMP/security-images:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1 image --scanners vuln --timeout 20m --input "/scan/image-$i.tar" --format json --output "/scan/image-$i.json" || status=1
+            docker run --rm -v "$RUNNER_TEMP/security-images:/scan" -v "$RUNNER_TEMP/trivy-cache:/root/.cache" aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --scanners vuln --timeout 20m --input "/scan/image-$i.tar" --format json --output "/scan/image-$i.json" || status=1
             python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(any(v["Severity"] in ("HIGH","CRITICAL") for r in d.get("Results",[]) for v in r.get("Vulnerabilities",[])))' "$RUNNER_TEMP/security-images/image-$i.json" || status=1
             rm -f "$RUNNER_TEMP/security-images/image-$i.tar"
           done
