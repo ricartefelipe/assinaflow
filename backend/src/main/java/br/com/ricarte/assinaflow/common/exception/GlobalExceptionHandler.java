@@ -4,8 +4,10 @@ import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -92,12 +94,19 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
+        // Rota inexistente, método ou tipo de conteúdo não suportado, parâmetro ou cabeçalho ausente: o próprio Spring
+        // sabe o status (4xx). Sem isto, o tratamento genérico abaixo respondia 500 a erros de quem chamou.
+        if (ex instanceof ErrorResponse error && error.getStatusCode().is4xxClientError()) {
+            ProblemDetail pd = error.getBody();
+            augmentProblem(pd, request, "REQUEST_ERROR");
+            return ResponseEntity.status(error.getStatusCode()).headers(error.getHeaders()).body(pd);
+        }
         log.error("Unhandled error path={}", request.getRequestURI(), ex);
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error");
         pd.setTitle("Internal Server Error");
         augmentProblem(pd, request, "INTERNAL_ERROR");
-        return pd;
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(pd);
     }
 
     private static void augmentProblem(ProblemDetail pd, HttpServletRequest request, String code) {
