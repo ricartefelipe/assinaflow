@@ -16,8 +16,12 @@ RUN rm -f /usr/share/maven/lib/guava-33.6.0-jre.jar \
     && rm -rf /var/lib/apt/lists/*
 
 FROM eclipse-temurin:21-jre
-# Java/Maven run directly; the unused base-image service supervisor is omitted.
-RUN if [ -f /usr/bin/pebble ]; then rm /usr/bin/pebble; fi \
+# Correcoes de seguranca da base publicadas depois da imagem entram em cada build; o pebble sai depois,
+# para o upgrade nao traze-lo de volta. Java/Maven run directly; the unused base-image service supervisor is omitted.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ -f /usr/bin/pebble ]; then rm /usr/bin/pebble; fi \
     && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app app
 WORKDIR /app
